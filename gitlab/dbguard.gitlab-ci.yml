@@ -1,0 +1,60 @@
+# DB Guard for GitLab CI: checks migrations changed in a merge request, posts ONE merge
+# request comment (edited in place on later pushes) and fails the job on blocking findings.
+#
+# Usage, in your .gitlab-ci.yml:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.2.0/gitlab/dbguard.gitlab-ci.yml
+#
+# Required CI/CD variables (Settings > CI/CD > Variables, masked):
+#   DBGUARD_GITLAB_TOKEN  project/group access token (or PAT) with the "api" scope and the Developer
+#                         role. CI_JOB_TOKEN cannot post merge request comments.
+#   DBGUARD_DSN           (optional) read-only PostgreSQL connection string, for real table sizes.
+#                         Without it every table is assumed large.
+#
+# Optional variables: DBGUARD_VERSION, DBGUARD_MIGRATIONS_PATH, DBGUARD_FAIL_ON.
+dbguard:check:
+  stage: test
+  image: alpine:3.20
+  variables:
+    GIT_DEPTH: "0" # the merge base must be available to diff against
+    DBGUARD_VERSION: "v0.2.0"
+    DBGUARD_REPO: "OriginalDaniel02/dbguard"
+    DBGUARD_MIGRATIONS_PATH: "db/migration"
+    DBGUARD_FAIL_ON: "medium-high"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  before_script:
+    - apk add --no-cache git curl
+  script:
+    - |
+      set -eu
+      # Install a checksum-verified static binary (skipped if one is already on PATH).
+      if ! command -v dbguard >/dev/null 2>&1; then
+        case "$(uname -m)" in aarch64|arm64) arch=arm64 ;; *) arch=amd64 ;; esac
+        base="https://github.com/${DBGUARD_REPO}/releases/download/${DBGUARD_VERSION}"
+        curl -fsSL -o /tmp/dbguard "${base}/dbguard_linux_${arch}"
+        curl -fsSL -o /tmp/checksums.txt "${base}/checksums.txt"
+        (cd /tmp && grep " dbguard_linux_${arch}\$" checksums.txt | sed "s# dbguard_linux_${arch}\$# dbguard#" | sha256sum -c -)
+        install -m 0755 /tmp/dbguard /usr/local/bin/dbguard
+      fi
+
+      # Migration files changed by this merge request (deleted files excluded).
+      changed=$(git diff --name-only --diff-filter=d "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- "$DBGUARD_MIGRATIONS_PATH" \
+        | grep -E '\.(sql|xml|ya?ml|json)$' || true)
+
+      if [ -z "$changed" ]; then
+        # Nothing to check. Resolve a stale warning from an earlier push, never create a comment.
+        dbguard gitlab-comment --no-migrations
+        exit 0
+      fi
+
+      set +e
+      # shellcheck disable=SC2086  # migration file names contain no spaces
+      dbguard check --format markdown --fail-on "$DBGUARD_FAIL_ON" $changed > dbguard-comment.md
+      code=$?
+      set -e
+      if [ "$code" -eq 2 ]; then cat dbguard-comment.md; exit 2; fi # usage / parse / connection error
+
+      dbguard gitlab-comment < dbguard-comment.md
+      exit "$code"

@@ -207,6 +207,26 @@ Do not add a `paths:` filter to this workflow. The action only looks at changed 
 
 On each run the action posts **one** comment on the pull request and keeps it up to date: it is edited in place as the PR changes, and updated (never left stale) if the risky migration is later removed. A failing check blocks the merge once you make the check required in branch protection.
 
+## GitLab CI
+
+The same check runs on GitLab merge requests. Include the template in your `.gitlab-ci.yml`:
+
+```yaml
+include:
+  - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.2.0/gitlab/dbguard.gitlab-ci.yml
+```
+
+Then add these CI/CD variables (Settings > CI/CD > Variables, masked):
+
+| Variable | Description |
+|---|---|
+| `DBGUARD_GITLAB_TOKEN` | Project or group access token with the `api` scope and the Developer role. `CI_JOB_TOKEN` cannot post merge request comments. |
+| `DBGUARD_DSN` | *(optional)* read-only PostgreSQL connection string, for real table sizes |
+
+Optional overrides: `DBGUARD_VERSION`, `DBGUARD_MIGRATIONS_PATH` (default `db/migration`), `DBGUARD_FAIL_ON`.
+
+The job posts **one** merge request comment, edits it in place on every push, resolves it when the risky migration is removed, and fails when there are blocking findings (make the pipeline required to block the merge). Under the hood it uses `dbguard gitlab-comment`, which you can also call yourself: `dbguard check --format markdown ... | dbguard gitlab-comment`.
+
 ## Accepting a risk
 
 Sometimes a flagged change is acceptable: the table is idle during your deploy window, or the warning is a false positive. Acknowledge it **in the migration file**, directly above the statement:
@@ -259,7 +279,8 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 |---|---|---|
 | **1** | Go CLI for PostgreSQL, full risk-rule table, Flyway SQL, GitHub Action with PR comments, auditable overrides | Implemented |
 | **2** | **Schema drift detection** (snapshots, comparison, Slack alerts, scheduled job) | Implemented |
-| | Liquibase, MySQL, GitLab CI | Planned |
+| | GitLab CI | Implemented |
+| | Liquibase, MySQL | Planned |
 | **3** | VS Code extension for inline feedback, per-table schema changelog | Planned |
 
 Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
@@ -282,7 +303,7 @@ DBGUARD_TEST_DSN='postgres://postgres:secret@localhost:55432/postgres?sslmode=di
 ### Project layout
 
 ```text
-cmd/dbguard        CLI entry point (check, snapshot, drift)
+cmd/dbguard        CLI entry point (check, snapshot, drift, gitlab-comment)
 internal/flyway    Flyway migration discovery
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
@@ -293,6 +314,8 @@ internal/drift     Snapshot comparison and ignore rules
 internal/notify    Slack alerts
 internal/report    Text / Markdown / JSON output
 action/            GitHub Action
+gitlab/            GitLab CI template
+internal/gitlab    GitLab merge request comments
 docs/              Rule reference, drift guide, acceptance criteria
 examples/          Ready-to-copy workflows (scheduled drift check)
 testdata/          Sample migrations

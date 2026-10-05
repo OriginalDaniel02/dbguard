@@ -23,6 +23,7 @@ commands:
   check     check Flyway migrations for risky locking operations
   snapshot  capture a read-only schema snapshot as JSON
   drift     compare live environments with the expected schema
+  gitlab-comment  post/update the DB Guard comment on a GitLab merge request
 
 usage of check: dbguard check [flags] <migration-file-or-dir>...
 Exit codes: 0 = no blocking findings, 1 = blocking findings, 2 = error.
@@ -38,6 +39,8 @@ func main() {
 			os.Exit(snapshotCmd(os.Args[2:], os.Stdout, os.Stderr))
 		case "drift":
 			os.Exit(driftCmd(os.Args[2:], os.Stdout, os.Stderr))
+		case "gitlab-comment":
+			os.Exit(gitlabCommentCmd(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
 	}
 	fmt.Fprintln(os.Stderr, usage)
