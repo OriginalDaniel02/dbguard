@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dbguard/dbguard/internal/rules"
+	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
 var re = regexp.MustCompile(`^\s*--\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*\S))?\s*$`)

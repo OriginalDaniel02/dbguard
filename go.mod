@@ -1,4 +1,4 @@
-module github.com/dbguard/dbguard
+module github.com/OriginalDaniel02/dbguard
 
 go 1.27.0
 

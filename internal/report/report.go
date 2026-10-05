@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/dbguard/dbguard/internal/rules"
+	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
 // Marker lets the GitHub Action find and update its own PR comment.
