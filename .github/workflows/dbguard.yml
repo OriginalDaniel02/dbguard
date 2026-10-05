@@ -1,7 +1,9 @@
 name: DB Guard
 on:
+  # No `paths:` filter on purpose: the action only checks changed migration files and is a
+  # no-op otherwise. A path filter would skip the run entirely, which leaves a stale comment
+  # behind when a risky migration is removed and blocks PRs when this check is "required".
   pull_request:
-    paths: ["db/migration/**.sql"]
 permissions:
   contents: read
   pull-requests: write

@@ -157,13 +157,12 @@ dbguard check --placeholder schema=app --rows app.orders=5000000 V6__x.sql
 
 ## GitHub Actions
 
-Add a workflow that runs on pull requests touching migrations:
+Add a workflow that runs on pull requests:
 
 ```yaml
 name: DB Guard
 on:
   pull_request:
-    paths: ["db/migration/**.sql"]
 permissions:
   contents: read
   pull-requests: write
@@ -185,6 +184,8 @@ jobs:
 | `migrations-path` | `db/migration` | Only changed `.sql` files under this path are checked |
 | `fail-on` | `medium-high` | Lowest risk that fails the check |
 | `version` | *(empty)* | Release to install (checksum-verified). Empty builds from the action's checkout |
+
+Do not add a `paths:` filter to this workflow. The action only looks at changed migration files and does nothing otherwise, whereas a path filter skips the run entirely: a stale warning stays on the PR after the risky migration is removed, and if you mark the check as *required*, PRs that don't touch migrations would wait forever for a check that never starts.
 
 On each run the action posts **one** comment on the pull request and keeps it up to date: it is edited in place as the PR changes, and updated (never left stale) if the risky migration is later removed. A failing check blocks the merge once you make the check required in branch protection.
 
