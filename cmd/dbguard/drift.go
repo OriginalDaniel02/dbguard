@@ -111,6 +111,8 @@ flags:`)
 	baseline := fs.String("baseline-env", "", "instead of --expected: compare every other --env against this environment")
 	ignoreFile := fs.String("ignore-file", "", "file with one ignore pattern per line (# comments allowed)")
 	slackEnv := fs.String("slack-env", "", "name of the env var holding a Slack incoming-webhook URL; alerts when drift is found")
+	stateFlag := fs.String("state-file", "", "remember what was alerted (JSON); Slack is only notified when drift is new or changed, and when it is resolved. Persist this file between runs (e.g. actions/cache)")
+	realert := fs.Duration("realert-after", 7*24*time.Hour, "with --state-file: remind about drift that stays unresolved after this long (0 = never remind)")
 	saveDir := fs.String("save-dir", "", "write each environment's snapshot to <dir>/<env>/<UTC timestamp>.json (history)")
 	format := fs.String("format", "text", "output format: text | json")
 	fs.Var(&envs, "env", "environment to check as name=ENV_VAR (the env var holds its read-only DSN); repeatable")
@@ -209,11 +211,29 @@ flags:`)
 		return 2
 	}
 
-	if drifted && *slackEnv != "" {
+	var state stateFile
+	if *stateFlag != "" {
+		var err error
+		if state, err = loadState(*stateFlag); err != nil {
+			fmt.Fprintln(stderr, "dbguard: warning: ignoring unreadable state file:", err)
+			state = stateFile{}
+		}
+	}
+	plan := planAlerts(state, order, results, *baseline, nowFn(), *realert)
+	delivered := true
+	if *slackEnv != "" && !plan.empty() {
 		if url := os.Getenv(*slackEnv); url == "" {
 			fmt.Fprintf(stderr, "dbguard: warning: $%s is not set; no Slack alert sent\n", *slackEnv)
-		} else if err := sendSlack(ctx, url, slackMessage(order, results, *baseline)); err != nil {
+			delivered = false
+		} else if err := sendSlack(ctx, url, slackMessage(order, results, *baseline, plan)); err != nil {
 			fmt.Fprintln(stderr, "dbguard: warning: Slack alert failed:", err)
+			delivered = false // keep state unchanged so the alert is retried next run
+		}
+	}
+	if state != nil && delivered {
+		state.apply(order, results, *baseline, plan, nowFn())
+		if err := state.save(*stateFlag); err != nil {
+			fmt.Fprintln(stderr, "dbguard: warning: could not save state file:", err)
 		}
 	}
 
@@ -245,24 +265,37 @@ func writeText(w io.Writer, order []string, results map[string]*envResult, basel
 	}
 }
 
-func slackMessage(order []string, results map[string]*envResult, baseline string) string {
+func slackMessage(order []string, results map[string]*envResult, baseline string, p alertPlan) string {
 	var b strings.Builder
-	b.WriteString(":warning: *DB Guard: schema drift detected*\n")
-	for _, n := range order {
-		r := results[n]
-		if n == baseline || len(r.Differences) == 0 {
-			continue
-		}
-		fmt.Fprintf(&b, "\n*%s* - %d difference(s)\n", n, len(r.Differences))
-		for i, d := range r.Differences {
-			if i == maxSlackDiffsPerEnv {
-				fmt.Fprintf(&b, "...and %d more\n", len(r.Differences)-maxSlackDiffsPerEnv)
-				break
+	if len(p.New) > 0 || len(p.Reminder) > 0 {
+		b.WriteString(":warning: *DB Guard: schema drift detected*\n")
+		for _, n := range order {
+			r := results[n]
+			_, remind := p.Reminder[n]
+			if !p.New[n] && !remind {
+				continue
 			}
-			fmt.Fprintf(&b, "• `%s` %s\n", d.Table, d)
+			fmt.Fprintf(&b, "\n*%s* - %d difference(s)", n, len(r.Differences))
+			if remind {
+				fmt.Fprintf(&b, " (still unresolved since %s)", p.Reminder[n].UTC().Format("2006-01-02"))
+			}
+			b.WriteString("\n")
+			for i, d := range r.Differences {
+				if i == maxSlackDiffsPerEnv {
+					fmt.Fprintf(&b, "...and %d more\n", len(r.Differences)-maxSlackDiffsPerEnv)
+					break
+				}
+				fmt.Fprintf(&b, "• `%s` %s\n", d.Table, d)
+			}
 		}
+		b.WriteString("\nReconcile by writing a migration that formalizes the change, or revert the manual one.")
 	}
-	b.WriteString("\nReconcile by writing a migration that formalizes the change, or revert the manual one.")
+	for _, n := range p.Resolved {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, ":white_check_mark: *DB Guard: drift resolved* - %s now matches the expected schema.", n)
+	}
 	return b.String()
 }
 

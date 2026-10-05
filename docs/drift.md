@@ -53,10 +53,12 @@ strings never appear on the command line or in logs.
 | `--ignore GLOB` | Ignore a table or object (repeatable), e.g. `public.feature_flags`, `public.accounts.debug_*` |
 | `--ignore-file FILE` | One ignore pattern per line; `#` comments |
 | `--slack-env VAR` | Env var holding a Slack incoming-webhook URL; alerts only when drift is found |
+| `--state-file FILE` | Remember what was alerted. Slack is told when drift is **new or changed**, as a **reminder** if it stays unresolved, and when it is **resolved**, not on every run |
+| `--realert-after DUR` | With `--state-file`: remind after this long (default `168h`; `0` = never remind) |
 | `--save-dir DIR` | Keep every snapshot as `DIR/<env>/<UTC timestamp>.json` for history |
 | `--format text\|json` | Output format |
 
-Exit codes: `0` no drift, `1` drift found, `2` error (could not connect, bad flags, bad snapshot file).
+Exit codes: `0` no drift, `1` drift found, `2` error (could not connect, bad flags, bad snapshot file). The exit code reflects the *current* state on every run; the state file only controls Slack noise.
 
 Example output:
 
@@ -114,4 +116,4 @@ A daily cron flags a manual change within one run cycle.
 
 - PostgreSQL only; tables, columns, indexes and constraints. Views, sequences, enums, functions, triggers, and
   permissions are not compared yet.
-- Differences are reported per environment; there is no deduplication across runs (an unreconciled drift alerts on every run).
+- The state file must be persisted between scheduled runs (the example uses `actions/cache`). Without `--state-file`, an unreconciled drift alerts on every run. An unreachable database is reported as an error (exit 2) and never counts as a resolution.
