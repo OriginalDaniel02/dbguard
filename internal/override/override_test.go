@@ -3,7 +3,7 @@ package override
 import (
 	"testing"
 
-	"github.com/dbguard/dbguard/internal/rules"
+	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
 func check(t *testing.T, sql string) ([]rules.Finding, []string) {

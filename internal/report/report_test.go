@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbguard/dbguard/internal/estimate"
-	"github.com/dbguard/dbguard/internal/rules"
+	"github.com/OriginalDaniel02/dbguard/internal/estimate"
+	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
 func sample() []File {

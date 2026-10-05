@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dbguard/dbguard/internal/flyway"
-	"github.com/dbguard/dbguard/internal/override"
-	"github.com/dbguard/dbguard/internal/pg"
-	"github.com/dbguard/dbguard/internal/report"
-	"github.com/dbguard/dbguard/internal/rules"
+	"github.com/OriginalDaniel02/dbguard/internal/flyway"
+	"github.com/OriginalDaniel02/dbguard/internal/override"
+	"github.com/OriginalDaniel02/dbguard/internal/pg"
+	"github.com/OriginalDaniel02/dbguard/internal/report"
+	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
 const usage = `usage: dbguard check [flags] <migration-file-or-dir>...
