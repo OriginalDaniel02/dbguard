@@ -1,0 +1,10 @@
+# binaries / build output
+/dbguard
+/dbguard.exe
+/dist/
+*.test
+*.out
+
+# local env
+.env
+*.local
