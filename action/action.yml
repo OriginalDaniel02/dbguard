@@ -1,0 +1,73 @@
+name: DB Guard
+description: Pre-flight check for risky PostgreSQL (Flyway) migrations. Posts a PR comment and fails the check on risky changes.
+inputs:
+  dsn:
+    description: Read-only PostgreSQL connection string (pass from a secret; never printed).
+    required: false
+  migrations-path:
+    description: Directory containing Flyway migrations (only changed files under it are checked).
+    default: db/migration
+  fail-on:
+    description: Lowest risk that fails the check (low | medium | medium-high | high).
+    default: medium-high
+  github-token:
+    description: Token used to read PR files and post the comment.
+    default: ${{ github.token }}
+  version:
+    description: dbguard release to install (e.g. v1.0.0). Empty = build from this checkout.
+    default: ""
+  repository:
+    description: GitHub repository that publishes dbguard releases.
+    default: ${{ github.action_repository }}
+runs:
+  using: composite
+  steps:
+    - name: Install dbguard
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        VERSION: ${{ inputs.version }}
+        REPO: ${{ inputs.repository }}
+      run: |
+        if [ -n "$VERSION" ]; then
+          # Prebuilt, checksum-verified binary: no Go toolchain needed on the runner.
+          arch=$([ "$(uname -m)" = "aarch64" ] && echo arm64 || echo amd64)
+          gh release download "$VERSION" -R "$REPO" -p "dbguard_linux_${arch}" -p checksums.txt -D "$RUNNER_TEMP/dl"
+          (cd "$RUNNER_TEMP/dl" && grep " dbguard_linux_${arch}\$" checksums.txt | sha256sum -c -)
+          install -m 0755 "$RUNNER_TEMP/dl/dbguard_linux_${arch}" "$RUNNER_TEMP/dbguard"
+        else
+          cd "${{ github.action_path }}/.." && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/dbguard" ./cmd/dbguard
+        fi
+    - name: Find changed migrations
+      id: files
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        MIG_PATH: ${{ inputs.migrations-path }}
+      run: |
+        gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[] | select(.status != "removed") | .filename' \
+          | grep -E "^${MIG_PATH%/}/.*\.sql$" > "$RUNNER_TEMP/changed.txt" || true
+        echo "count=$(wc -l < "$RUNNER_TEMP/changed.txt")" >> "$GITHUB_OUTPUT"
+    - name: Run dbguard check
+      if: steps.files.outputs.count != '0'
+      shell: bash
+      env:
+        DBGUARD_DSN: ${{ inputs.dsn }}   # read by the binary from the environment; never echoed
+        GH_TOKEN: ${{ inputs.github-token }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set +e
+        mapfile -t files < "$RUNNER_TEMP/changed.txt"   # not xargs: it rewrites exit codes 1-125 to 123
+        "$RUNNER_TEMP/dbguard" check --format markdown --fail-on "$FAIL_ON" "${files[@]}" > "$RUNNER_TEMP/comment.md"
+        code=$?
+        if [ "$code" -eq 2 ]; then cat "$RUNNER_TEMP/comment.md"; exit 2; fi
+
+        # Upsert a single DB Guard comment on the PR.
+        api="repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
+        id=$(gh api "$api" --paginate -q '.[] | select(.body | contains("<!-- dbguard-report -->")) | .id' | head -n1)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+        else
+          gh api "$api" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+        fi
+        exit $code
