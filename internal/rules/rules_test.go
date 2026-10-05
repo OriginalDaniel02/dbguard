@@ -1,6 +1,9 @@
 package rules
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 type fakeStats map[string]int64
 
@@ -101,4 +104,54 @@ func TestEstimateMessage(t *testing.T) {
 		t.Fatalf("missing estimate/message: %+v", f)
 	}
 	t.Log(f.Message)
+}
+
+func TestFlywayPlaceholders(t *testing.T) {
+	sql := "CREATE INDEX idx ON ${schema}.transactions (a);\n"
+	fs, err := Check(sql, Options{})
+	if err != nil {
+		t.Fatalf("placeholders must not break parsing: %v", err)
+	}
+	if len(fs) != 1 || fs[0].Table != "${schema}.transactions" || fs[0].Rule != CreateIndex {
+		t.Fatalf("unexpected: %+v", fs)
+	}
+	if !strings.Contains(fs[0].Statement, "${schema}") || strings.Contains(fs[0].Statement, "dbguard_ph") {
+		t.Errorf("statement not restored: %q", fs[0].Statement)
+	}
+	// With a value, the real table's size is used.
+	fs, err = Check(sql, Options{Placeholders: map[string]string{"schema": "public"}, Stats: big})
+	if err != nil || len(fs) != 1 || fs[0].Table != "public.transactions" || fs[0].Rows != 14_000_000 {
+		t.Fatalf("unexpected with value: %+v %v", fs, err)
+	}
+}
+
+type checkStats struct {
+	fakeStats
+	has bool
+}
+
+func (c checkStats) HasNotNullCheck(schema, table, col string) bool { return c.has }
+
+func TestNotNullSafeWhenDBHasValidatedCheck(t *testing.T) {
+	sql := "ALTER TABLE transactions ALTER COLUMN ref SET NOT NULL;"
+	fs, _ := Check(sql, Options{PGVersion: 16, Stats: checkStats{big, true}})
+	if len(fs) != 0 {
+		t.Fatalf("want safe, got %+v", fs)
+	}
+	fs, _ = Check(sql, Options{PGVersion: 11, Stats: checkStats{big, true}})
+	if len(fs) != 1 {
+		t.Fatalf("PG 11 has no check-based skip; want finding, got %+v", fs)
+	}
+	fs, _ = Check(sql, Options{PGVersion: 16, Stats: checkStats{big, false}})
+	if len(fs) != 1 {
+		t.Fatalf("no check in DB; want finding, got %+v", fs)
+	}
+}
+
+func TestDefaultSchema(t *testing.T) {
+	st := fakeStats{"app.orders": 5_000_000}
+	fs, _ := Check("CREATE INDEX i ON orders (a);", Options{Stats: st, DefaultSchema: "app"})
+	if len(fs) != 1 || fs[0].Table != "app.orders" || fs[0].Rows != 5_000_000 {
+		t.Fatalf("unexpected: %+v", fs)
+	}
 }
