@@ -49,7 +49,6 @@ runs:
           | grep -E "^${MIG_PATH%/}/.*\.sql$" > "$RUNNER_TEMP/changed.txt" || true
         echo "count=$(wc -l < "$RUNNER_TEMP/changed.txt")" >> "$GITHUB_OUTPUT"
     - name: Run dbguard check
-      if: steps.files.outputs.count != '0'
       shell: bash
       env:
         DBGUARD_DSN: ${{ inputs.dsn }}   # read by the binary from the environment; never echoed
@@ -57,14 +56,23 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
       run: |
         set +e
-        mapfile -t files < "$RUNNER_TEMP/changed.txt"   # not xargs: it rewrites exit codes 1-125 to 123
-        "$RUNNER_TEMP/dbguard" check --format markdown --fail-on "$FAIL_ON" "${files[@]}" > "$RUNNER_TEMP/comment.md"
-        code=$?
-        if [ "$code" -eq 2 ]; then cat "$RUNNER_TEMP/comment.md"; exit 2; fi
-
-        # Upsert a single DB Guard comment on the PR.
         api="repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
         id=$(gh api "$api" --paginate -q '.[] | select(.body | contains("<!-- dbguard-report -->")) | .id' | head -n1)
+
+        code=0
+        if [ "${{ steps.files.outputs.count }}" = "0" ]; then
+          # No migrations changed (e.g. the risky one was removed in a later push).
+          # Never create a comment for this, but don't leave a stale warning behind.
+          [ -z "$id" ] && exit 0
+          printf '%s\n\n%s\n\n%s\n' '<!-- dbguard-report -->' '## DB Guard: no migration files changed in this PR' 'Earlier findings no longer apply.' > "$RUNNER_TEMP/comment.md"
+        else
+          mapfile -t files < "$RUNNER_TEMP/changed.txt"   # not xargs: it rewrites exit codes 1-125 to 123
+          "$RUNNER_TEMP/dbguard" check --format markdown --fail-on "$FAIL_ON" "${files[@]}" > "$RUNNER_TEMP/comment.md"
+          code=$?
+          if [ "$code" -eq 2 ]; then cat "$RUNNER_TEMP/comment.md"; exit 2; fi
+        fi
+
+        # Upsert the single DB Guard comment on the PR.
         if [ -n "$id" ]; then
           gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
         else
