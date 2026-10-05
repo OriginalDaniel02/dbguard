@@ -14,10 +14,50 @@ import (
 const Version = 1
 
 type Schema struct {
-	FormatVersion int     `json:"format_version"`
-	Engine        string  `json:"engine"`
-	ServerMajor   int     `json:"server_major,omitempty"`
-	Tables        []Table `json:"tables"`
+	FormatVersion int        `json:"format_version"`
+	Engine        string     `json:"engine"`
+	ServerMajor   int        `json:"server_major,omitempty"`
+	Tables        []Table    `json:"tables"`
+	Views         []View     `json:"views,omitempty"` // includes materialized views
+	Sequences     []Sequence `json:"sequences,omitempty"`
+	Enums         []Enum     `json:"enums,omitempty"`
+}
+
+type View struct {
+	Schema       string `json:"schema"`
+	Name         string `json:"name"`
+	Def          string `json:"def"`
+	Materialized bool   `json:"materialized,omitempty"`
+}
+
+// QName is the schema-qualified view name.
+func (v View) QName() string { return v.Schema + "." + v.Name }
+
+type Sequence struct {
+	Schema    string `json:"schema"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Start     int64  `json:"start"`
+	Min       int64  `json:"min"`
+	Max       int64  `json:"max"`
+	Increment int64  `json:"increment"`
+	Cycle     bool   `json:"cycle,omitempty"`
+}
+
+func (q Sequence) QName() string { return q.Schema + "." + q.Name }
+
+// Enum labels are kept in their sort order, which is meaningful.
+type Enum struct {
+	Schema string   `json:"schema"`
+	Name   string   `json:"name"`
+	Labels []string `json:"labels"`
+}
+
+func (e Enum) QName() string { return e.Schema + "." + e.Name }
+
+type Trigger struct {
+	Name string `json:"name"`
+	Def  string `json:"def"`
 }
 
 type Table struct {
@@ -26,6 +66,7 @@ type Table struct {
 	Columns     []Column     `json:"columns"`
 	Indexes     []Index      `json:"indexes,omitempty"`
 	Constraints []Constraint `json:"constraints,omitempty"`
+	Triggers    []Trigger    `json:"triggers,omitempty"`
 }
 
 // QName is the schema-qualified table name.
@@ -64,7 +105,11 @@ func (s *Schema) Normalize() {
 		sort.Slice(t.Columns, func(a, b int) bool { return t.Columns[a].Name < t.Columns[b].Name })
 		sort.Slice(t.Indexes, func(a, b int) bool { return t.Indexes[a].Name < t.Indexes[b].Name })
 		sort.Slice(t.Constraints, func(a, b int) bool { return t.Constraints[a].Name < t.Constraints[b].Name })
+		sort.Slice(t.Triggers, func(a, b int) bool { return t.Triggers[a].Name < t.Triggers[b].Name })
 	}
+	sort.Slice(s.Views, func(i, j int) bool { return s.Views[i].QName() < s.Views[j].QName() })
+	sort.Slice(s.Sequences, func(i, j int) bool { return s.Sequences[i].QName() < s.Sequences[j].QName() })
+	sort.Slice(s.Enums, func(i, j int) bool { return s.Enums[i].QName() < s.Enums[j].QName() })
 }
 
 func Write(w io.Writer, s *Schema) error {

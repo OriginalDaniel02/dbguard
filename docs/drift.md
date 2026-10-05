@@ -24,7 +24,7 @@ with `--baseline-env`.
 
 ### `dbguard snapshot`
 
-Captures a normalized snapshot (tables, columns with type/nullability/default, indexes, constraints) as JSON,
+Captures a normalized snapshot (tables, columns with type/nullability/default, indexes, constraints, triggers, views and materialized views, sequences, enum types) as JSON,
 from catalog queries only, in a read-only transaction. No table data is read.
 
 ```bash
@@ -80,6 +80,10 @@ production: 2 difference(s)
 | `column-default-changed` | Default, identity, or generated expression differs |
 | `index-missing` / `index-extra` / `index-changed` | Index added, dropped, or redefined |
 | `constraint-missing` / `constraint-extra` / `constraint-changed` | Primary/unique/foreign/check constraint added, dropped, redefined, or left `NOT VALID` |
+| `trigger-missing` / `trigger-extra` / `trigger-changed` | User-defined trigger dropped, added, or redefined (foreign-key triggers are internal and ignored) |
+| `view-missing` / `view-extra` / `view-changed` | View or materialized view dropped, added, or its definition changed |
+| `sequence-missing` / `sequence-extra` / `sequence-changed` | Sequence dropped, added, or its start / increment / min / max / cycle changed (the current value is data and is never read) |
+| `enum-missing` / `enum-extra` / `enum-changed` | Enum type dropped, added, or its labels changed (label order counts) |
 
 Column *order* is deliberately ignored: it changes harmlessly after a column is dropped.
 
@@ -114,6 +118,6 @@ A daily cron flags a manual change within one run cycle.
 
 ## Limits (v0.1)
 
-- PostgreSQL only; tables, columns, indexes and constraints. Views, sequences, enums, functions, triggers, and
-  permissions are not compared yet.
+- PostgreSQL only. Compared: tables, columns, indexes, constraints, triggers, views, sequences, enums. Not compared yet: functions and procedures, other custom types (composite, domain), extensions, and permissions.
+- View definitions are compared as PostgreSQL prints them, so comparing environments on *different major versions* can show formatting-only differences. Use the same major version for the scratch database as for production.
 - The state file must be persisted between scheduled runs (the example uses `actions/cache`). Without `--state-file`, an unreconciled drift alerts on every run. An unreachable database is reported as an error (exit 2) and never counts as a resolution.

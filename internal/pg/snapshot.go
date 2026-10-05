@@ -25,6 +25,7 @@ func (s *Stats) Snapshot(ctx context.Context) (*snapshot.Schema, error) {
 	cols := map[key][]snapshot.Column{}
 	idxs := map[key][]snapshot.Index{}
 	cons := map[key][]snapshot.Constraint{}
+	trigs := map[key][]snapshot.Trigger{}
 	var order []key
 	seen := map[key]bool{}
 	touch := func(k key) {
@@ -112,11 +113,110 @@ func (s *Stats) Snapshot(ctx context.Context) (*snapshot.Schema, error) {
 		return nil, err
 	}
 
+	// Triggers (user-defined only; constraint triggers backing foreign keys are internal).
+	rows, err = tx.Query(ctx, `
+		SELECT n.nspname, c.relname, tg.tgname, pg_get_triggerdef(tg.oid)
+		FROM pg_trigger tg
+		JOIN pg_class c ON c.oid = tg.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE NOT tg.tgisinternal AND c.relkind IN ('r', 'p') AND `+schemaFilter)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var k key
+		var tr snapshot.Trigger
+		if err := rows.Scan(&k.schema, &k.name, &tr.Name, &tr.Def); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		trigs[k] = append(trigs[k], tr)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Views and materialized views.
+	rows, err = tx.Query(ctx, `
+		SELECT n.nspname, c.relname, pg_get_viewdef(c.oid, true), c.relkind = 'm'
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE c.relkind IN ('v', 'm') AND `+schemaFilter)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var v snapshot.View
+		if err := rows.Scan(&v.Schema, &v.Name, &v.Def, &v.Materialized); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out.Views = append(out.Views, v)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Sequences (definition only; the current value is data and is not read).
+	rows, err = tx.Query(ctx, `
+		SELECT schemaname, sequencename, data_type::text, start_value, min_value, max_value, increment_by, cycle
+		FROM pg_sequences s
+		JOIN pg_namespace n ON n.nspname = s.schemaname
+		WHERE `+schemaFilter)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var q snapshot.Sequence
+		if err := rows.Scan(&q.Schema, &q.Name, &q.Type, &q.Start, &q.Min, &q.Max, &q.Increment, &q.Cycle); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out.Sequences = append(out.Sequences, q)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Enum types, labels in their defined order.
+	rows, err = tx.Query(ctx, `
+		SELECT n.nspname, t.typname, e.enumlabel
+		FROM pg_type t
+		JOIN pg_enum e ON e.enumtypid = t.oid
+		JOIN pg_namespace n ON n.oid = t.typnamespace
+		WHERE `+schemaFilter+`
+		ORDER BY n.nspname, t.typname, e.enumsortorder`)
+	if err != nil {
+		return nil, err
+	}
+	enums := map[string]*snapshot.Enum{}
+	for rows.Next() {
+		var schema, name, label string
+		if err := rows.Scan(&schema, &name, &label); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		k := schema + "." + name
+		if enums[k] == nil {
+			enums[k] = &snapshot.Enum{Schema: schema, Name: name}
+		}
+		enums[k].Labels = append(enums[k].Labels, label)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, e := range enums {
+		out.Enums = append(out.Enums, *e)
+	}
+
 	out.Tables = nil
 	for _, k := range order {
 		out.Tables = append(out.Tables, snapshot.Table{
 			Schema: k.schema, Name: k.name,
-			Columns: cols[k], Indexes: idxs[k], Constraints: cons[k],
+			Columns: cols[k], Indexes: idxs[k], Constraints: cons[k], Triggers: trigs[k],
 		})
 	}
 	out.Normalize()

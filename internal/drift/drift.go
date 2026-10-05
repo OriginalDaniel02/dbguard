@@ -25,6 +25,18 @@ const (
 	ConstraintMissing = "constraint-missing"
 	ConstraintExtra   = "constraint-extra"
 	ConstraintChanged = "constraint-changed"
+	TriggerMissing    = "trigger-missing"
+	TriggerExtra      = "trigger-extra"
+	TriggerChanged    = "trigger-changed"
+	ViewMissing       = "view-missing"
+	ViewExtra         = "view-extra"
+	ViewChanged       = "view-changed"
+	SequenceMissing   = "sequence-missing"
+	SequenceExtra     = "sequence-extra"
+	SequenceChanged   = "sequence-changed"
+	EnumMissing       = "enum-missing"
+	EnumExtra         = "enum-extra"
+	EnumChanged       = "enum-changed"
 )
 
 // Difference is one concrete divergence, named precisely enough to act on.
@@ -42,13 +54,13 @@ func (d Difference) String() string {
 		obj += "." + d.Object
 	}
 	switch d.Kind {
-	case TableMissing:
-		return fmt.Sprintf("table %s is missing (expected by migrations)", d.Table)
-	case TableExtra:
-		return fmt.Sprintf("table %s exists but is not in the migrations", d.Table)
-	case ColumnMissing, IndexMissing, ConstraintMissing:
+	case TableMissing, ViewMissing, SequenceMissing, EnumMissing:
+		return fmt.Sprintf("%s %s is missing (expected by migrations)", strings.TrimSuffix(d.Kind, "-missing"), d.Table)
+	case TableExtra, ViewExtra, SequenceExtra, EnumExtra:
+		return fmt.Sprintf("%s %s exists but is not in the migrations", strings.TrimSuffix(d.Kind, "-extra"), d.Table)
+	case ColumnMissing, IndexMissing, ConstraintMissing, TriggerMissing:
 		return fmt.Sprintf("%s %s is missing (expected %s)", strings.TrimSuffix(d.Kind, "-missing"), obj, d.Expected)
-	case ColumnExtra, IndexExtra, ConstraintExtra:
+	case ColumnExtra, IndexExtra, ConstraintExtra, TriggerExtra:
 		return fmt.Sprintf("%s %s was added outside migrations (%s)", strings.TrimSuffix(d.Kind, "-extra"), obj, d.Actual)
 	}
 	return fmt.Sprintf("%s: %s, expected %q, found %q", obj, strings.ReplaceAll(d.Kind, "-", " "), d.Expected, d.Actual)
@@ -99,6 +111,9 @@ func Compare(expected, actual *snapshot.Schema, opts Options) []Difference {
 			out = append(out, Difference{Kind: TableExtra, Table: name})
 		}
 	}
+	out = append(out, compareViews(expected, actual, opts)...)
+	out = append(out, compareSequences(expected, actual, opts)...)
+	out = append(out, compareEnums(expected, actual, opts)...)
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.Table != b.Table {
@@ -178,6 +193,24 @@ func compareTable(e, a snapshot.Table, opts Options) []Difference {
 			out = append(out, Difference{Kind: ConstraintExtra, Table: t, Object: n, Actual: c.Def})
 		}
 	}
+
+	et, at := trigs(e), trigs(a)
+	for n, tr := range et {
+		if skip(n) {
+			continue
+		}
+		o, ok := at[n]
+		if !ok {
+			out = append(out, Difference{Kind: TriggerMissing, Table: t, Object: n, Expected: tr.Def})
+		} else if tr.Def != o.Def {
+			out = append(out, Difference{Kind: TriggerChanged, Table: t, Object: n, Expected: tr.Def, Actual: o.Def})
+		}
+	}
+	for n, tr := range at {
+		if _, ok := et[n]; !ok && !skip(n) {
+			out = append(out, Difference{Kind: TriggerExtra, Table: t, Object: n, Actual: tr.Def})
+		}
+	}
 	return out
 }
 
@@ -237,4 +270,110 @@ func cons(t snapshot.Table) map[string]snapshot.Constraint {
 		m[c.Name] = c
 	}
 	return m
+}
+
+func trigs(t snapshot.Table) map[string]snapshot.Trigger {
+	m := map[string]snapshot.Trigger{}
+	for _, c := range t.Triggers {
+		m[c.Name] = c
+	}
+	return m
+}
+
+func compareViews(e, a *snapshot.Schema, opts Options) []Difference {
+	var out []Difference
+	em, am := map[string]snapshot.View{}, map[string]snapshot.View{}
+	for _, v := range e.Views {
+		em[v.QName()] = v
+	}
+	for _, v := range a.Views {
+		am[v.QName()] = v
+	}
+	for n, v := range em {
+		if opts.ignored(n) {
+			continue
+		}
+		o, ok := am[n]
+		switch {
+		case !ok:
+			out = append(out, Difference{Kind: ViewMissing, Table: n})
+		case v.Def != o.Def || v.Materialized != o.Materialized:
+			out = append(out, Difference{Kind: ViewChanged, Table: n, Expected: viewDesc(v), Actual: viewDesc(o)})
+		}
+	}
+	for n := range am {
+		if _, ok := em[n]; !ok && !opts.ignored(n) {
+			out = append(out, Difference{Kind: ViewExtra, Table: n})
+		}
+	}
+	return out
+}
+
+func viewDesc(v snapshot.View) string {
+	if v.Materialized {
+		return "MATERIALIZED " + v.Def
+	}
+	return v.Def
+}
+
+func compareSequences(e, a *snapshot.Schema, opts Options) []Difference {
+	var out []Difference
+	em, am := map[string]snapshot.Sequence{}, map[string]snapshot.Sequence{}
+	for _, v := range e.Sequences {
+		em[v.QName()] = v
+	}
+	for _, v := range a.Sequences {
+		am[v.QName()] = v
+	}
+	for n, v := range em {
+		if opts.ignored(n) {
+			continue
+		}
+		o, ok := am[n]
+		switch {
+		case !ok:
+			out = append(out, Difference{Kind: SequenceMissing, Table: n})
+		case v != o:
+			out = append(out, Difference{Kind: SequenceChanged, Table: n, Expected: seqDesc(v), Actual: seqDesc(o)})
+		}
+	}
+	for n := range am {
+		if _, ok := em[n]; !ok && !opts.ignored(n) {
+			out = append(out, Difference{Kind: SequenceExtra, Table: n})
+		}
+	}
+	return out
+}
+
+func seqDesc(q snapshot.Sequence) string {
+	return fmt.Sprintf("%s start %d increment %d min %d max %d cycle=%v", q.Type, q.Start, q.Increment, q.Min, q.Max, q.Cycle)
+}
+
+func compareEnums(e, a *snapshot.Schema, opts Options) []Difference {
+	var out []Difference
+	em, am := map[string]snapshot.Enum{}, map[string]snapshot.Enum{}
+	for _, v := range e.Enums {
+		em[v.QName()] = v
+	}
+	for _, v := range a.Enums {
+		am[v.QName()] = v
+	}
+	for n, v := range em {
+		if opts.ignored(n) {
+			continue
+		}
+		o, ok := am[n]
+		switch {
+		case !ok:
+			out = append(out, Difference{Kind: EnumMissing, Table: n})
+		case strings.Join(v.Labels, "\x00") != strings.Join(o.Labels, "\x00"):
+			out = append(out, Difference{Kind: EnumChanged, Table: n, Expected: strings.Join(v.Labels, ", "), Actual: strings.Join(o.Labels, ", ")})
+		}
+	}
+	for n := range am {
+		if _, ok := em[n]; !ok && !opts.ignored(n) {
+			out = append(out, Difference{Kind: EnumExtra, Table: n})
+		}
+	}
+	return out
 }
