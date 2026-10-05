@@ -12,5 +12,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./action
         with:
+          version: v0.1.0
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
           migrations-path: db/migration
