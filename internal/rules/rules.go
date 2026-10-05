@@ -93,7 +93,8 @@ type Options struct {
 	LargeRows     int64             // tables below this are not considered "large"; default 100_000
 	Stats         Stats             // may be nil (sizes unknown => assume large)
 	DefaultSchema string            // schema for unqualified names; default "public"
-	Placeholders  map[string]string // Flyway ${name} values; unset ones are treated as opaque identifiers
+	Placeholders  map[string]string // ${name} values; unset ones are treated as opaque identifiers
+	Tool          string            // "flyway" (default) or "liquibase": tailors the suggested alternatives
 }
 
 func (o Options) schema() string {
@@ -181,9 +182,12 @@ func (e *engine) index(c stmtCtx, s *pg_query.IndexStmt) {
 	if s.Concurrent {
 		return
 	}
+	alt := "CREATE INDEX CONCURRENTLY (must run outside a transaction; in Flyway set executeInTransaction=false)"
+	if e.opts.Tool == "liquibase" {
+		alt = `CREATE INDEX CONCURRENTLY in a <sql> change with runInTransaction="false" (the createIndex change type cannot do this)`
+	}
 	e.add(c, s.Relation, CreateIndex, High, estimate.IndexBuild,
-		"SHARE lock: blocks writes to the table for the whole index build",
-		"CREATE INDEX CONCURRENTLY (must run outside a transaction; in Flyway set executeInTransaction=false)")
+		"SHARE lock: blocks writes to the table for the whole index build", alt)
 }
 
 func (e *engine) alterCmd(c stmtCtx, rel *pg_query.RangeVar, cmd *pg_query.AlterTableCmd) {

@@ -39,3 +39,41 @@ func TestOverrideWrongRuleOrUnused(t *testing.T) {
 		t.Fatalf("wrong-rule ignore must not apply: %+v / %v", fs, probs)
 	}
 }
+
+func TestCommentStyles(t *testing.T) {
+	cases := map[string]string{
+		"xml":  "<!-- dbguard:ignore create-index reason: quiet window -->",
+		"yaml": "# dbguard:ignore create-index reason: quiet window",
+		"sql":  "-- dbguard:ignore create-index reason: quiet window",
+	}
+	for name, line := range cases {
+		ds := Parse(line + "\n")
+		if len(ds) != 1 || ds[0].Rule != "create-index" || ds[0].Reason != "quiet window" {
+			t.Errorf("%s: %+v", name, ds)
+		}
+	}
+	if ds := Parse("<!-- dbguard:ignore create-index -->"); len(ds) != 1 || ds[0].Reason != "" {
+		t.Errorf("reasonless xml directive must parse with an empty reason: %+v", ds)
+	}
+}
+
+func TestParseComment(t *testing.T) {
+	r, why, ok := ParseComment("dbguard:ignore add-not-null reason: backfilled in V41")
+	if !ok || r != "add-not-null" || why != "backfilled in V41" {
+		t.Fatalf("%q %q %v", r, why, ok)
+	}
+	if _, _, ok := ParseComment("just a normal changeset comment"); ok {
+		t.Error("ordinary comments are not directives")
+	}
+	if _, why, ok := ParseComment("dbguard:ignore create-index"); !ok || why != "" {
+		t.Error("a reasonless directive parses, but with an empty reason so callers can reject it")
+	}
+}
+
+func TestXMLOverrideAboveChangeSet(t *testing.T) {
+	sql := "<databaseChangeLog>\n<!-- dbguard:ignore create-index reason: quiet window -->\n<changeSet id=\"1\" author=\"a\">\n"
+	fs := []rules.Finding{{Rule: rules.CreateIndex, Line: 3, Statement: "CREATE INDEX i ON t (a)"}}
+	if probs := Apply(sql, fs); len(probs) != 0 || fs[0].Override != "quiet window" {
+		t.Fatalf("%+v %v", fs, probs)
+	}
+}

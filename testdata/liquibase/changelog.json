@@ -1,0 +1,45 @@
+{
+  "databaseChangeLog": [
+    {"property": {"name": "now", "value": "now()", "dbms": "postgresql"}},
+    {"property": {"name": "now", "value": "sysdate", "dbms": "oracle"}},
+    {"changeSet": {"id": "1", "author": "dev", "changes": [
+      {"createTable": {"tableName": "widgets", "columns": [
+        {"column": {"name": "id", "type": "bigint"}},
+        {"column": {"name": "name", "type": "text"}}]}},
+      {"createIndex": {"tableName": "widgets", "indexName": "idx_widgets_name", "columns": [
+        {"column": {"name": "name"}}]}}]}},
+    {"changeSet": {"id": "2", "author": "dev", "changes": [
+      {"addColumn": {"tableName": "transactions", "columns": [
+        {"column": {"name": "note", "type": "text"}},
+        {"column": {"name": "created_at", "type": "timestamptz", "defaultValueComputed": "${now}"}}]}}]}},
+    {"changeSet": {"id": "3", "author": "dev", "changes": [
+      {"addColumn": {"tableName": "transactions", "columns": [
+        {"column": {"name": "score", "type": "float8", "defaultValueComputed": "random()"}}]}}]}},
+    {"changeSet": {"id": "4", "author": "dev", "changes": [
+      {"createIndex": {"tableName": "transactions", "indexName": "idx_tx_amount", "columns": [
+        {"column": {"name": "amount"}}]}}]}},
+    {"changeSet": {"id": "5", "author": "dev",
+      "comment": "dbguard:ignore add-not-null reason: backfilled and enforced by the app since v41",
+      "changes": [
+      {"addNotNullConstraint": {"tableName": "transactions", "columnName": "ref", "columnDataType": "text"}}]}},
+    {"changeSet": {"id": "6", "author": "dev", "changes": [
+      {"modifyDataType": {"tableName": "transactions", "columnName": "amount", "newDataType": "bigint"}},
+      {"addUniqueConstraint": {"tableName": "transactions", "columnNames": "ref", "constraintName": "uq_tx_ref"}},
+      {"addForeignKeyConstraint": {"baseTableName": "transactions", "baseColumnNames": "account_id",
+        "referencedTableName": "accounts", "referencedColumnNames": "id", "constraintName": "fk_tx_acct", "validate": false}},
+      {"dropColumn": {"tableName": "transactions", "columnName": "legacy"}}]}},
+    {"changeSet": {"id": "7", "author": "dev", "runInTransaction": false, "changes": [
+      {"sql": {"sql": "CREATE INDEX CONCURRENTLY idx_tx_ref ON transactions (ref)"}}]}},
+    {"changeSet": {"id": "8", "author": "dev", "changes": [
+      {"addLookupTable": {"existingTableName": "transactions", "existingColumnName": "kind",
+        "newTableName": "kinds", "newColumnName": "kind"}}]}},
+    {"changeSet": {"id": "9", "author": "dev", "dbms": "oracle", "changes": [
+      {"createIndex": {"tableName": "transactions", "indexName": "oracle_only", "columns": [
+        {"column": {"name": "ref"}}]}}]}},
+    {"changeSet": {"id": "10", "author": "dev",
+      "comment": "dbguard:ignore create-index reason: write-quiet during the maintenance window",
+      "changes": [
+      {"createIndex": {"tableName": "transactions", "indexName": "idx_tx_created", "columns": [
+        {"column": {"name": "created_at"}}]}}]}}
+  ]
+}

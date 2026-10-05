@@ -2,10 +2,14 @@
 //
 // Syntax, inside the migration file (so it lands in git history and code review):
 //
-//	-- dbguard:ignore <rule-id> reason: <why this is acceptable>
+//	-- dbguard:ignore <rule-id> reason: <why this is acceptable>      (SQL)
+//	<!-- dbguard:ignore <rule-id> reason: <why> -->                   (Liquibase XML)
+//	# dbguard:ignore <rule-id> reason: <why>                          (Liquibase YAML)
 //
-// The comment must sit on the line(s) directly above the statement, or inside
-// it. A reason is mandatory; an ignore without one is itself reported.
+// The comment must sit on the line(s) directly above the statement (or changeSet),
+// or inside it. A reason is mandatory; an ignore without one is itself reported.
+// Liquibase changeSets can also carry the directive in their own comment field,
+// see ParseComment.
 package override
 
 import (
@@ -16,7 +20,20 @@ import (
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
-var re = regexp.MustCompile(`^\s*--\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*\S))?\s*$`)
+var re = regexp.MustCompile(`^\s*(?:--|#|<!--)\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*?))?\s*(?:-->)?\s*$`)
+
+var commentRe = regexp.MustCompile(`(?s)^\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*?))?\s*$`)
+
+// ParseComment reads a directive from free text, such as a Liquibase changeSet's
+// comment ("dbguard:ignore create-index reason: ..."). ok is false when the text is
+// not a directive.
+func ParseComment(text string) (rule, reason string, ok bool) {
+	m := commentRe.FindStringSubmatch(text)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], strings.TrimSpace(m[2]), true
+}
 
 // Directive is one parsed ignore comment.
 type Directive struct {

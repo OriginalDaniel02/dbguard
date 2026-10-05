@@ -46,7 +46,7 @@ runs:
         MIG_PATH: ${{ inputs.migrations-path }}
       run: |
         gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[] | select(.status != "removed") | .filename' \
-          | grep -E "^${MIG_PATH%/}/.*\.sql$" > "$RUNNER_TEMP/changed.txt" || true
+          | grep -E "^${MIG_PATH%/}/.*\.(sql|xml|ya?ml|json)$" > "$RUNNER_TEMP/changed.txt" || true
         echo "count=$(wc -l < "$RUNNER_TEMP/changed.txt")" >> "$GITHUB_OUTPUT"
     - name: Run dbguard check
       shell: bash

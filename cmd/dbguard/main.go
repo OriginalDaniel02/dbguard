@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OriginalDaniel02/dbguard/internal/flyway"
-	"github.com/OriginalDaniel02/dbguard/internal/override"
 	"github.com/OriginalDaniel02/dbguard/internal/pg"
 	"github.com/OriginalDaniel02/dbguard/internal/report"
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
@@ -20,7 +18,7 @@ import (
 const usage = `usage: dbguard <command> [flags]
 
 commands:
-  check     check Flyway migrations for risky locking operations
+  check     check Flyway or Liquibase migrations for risky locking operations
   snapshot  capture a read-only schema snapshot as JSON
   drift     compare live environments with the expected schema
   gitlab-comment  post/update the DB Guard comment on a GitLab merge request
@@ -111,7 +109,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "dbguard:", err)
 		return 2
 	}
-	files, err := flyway.Collect(fs.Args())
+	files, err := collect(fs.Args())
 	if err != nil {
 		fmt.Fprintln(stderr, "dbguard:", err)
 		return 2
@@ -146,13 +144,11 @@ func check(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}
-		sql := string(b)
-		found, err := rules.Check(sql, opts)
+		found, problems, err := analyze(path, string(b), opts)
 		if err != nil {
 			fmt.Fprintf(stderr, "dbguard: %s: %v\n", path, err)
 			return 2
 		}
-		problems := override.Apply(sql, found)
 		for _, f := range found {
 			blocking = blocking || report.Blocking(f, threshold)
 		}

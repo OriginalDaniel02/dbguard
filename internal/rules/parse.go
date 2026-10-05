@@ -9,3 +9,11 @@ import (
 func pgParse(sql string) (*pg_query.ParseResult, error) {
 	return pgquery.Parse(sql)
 }
+
+// Parses reports whether sql is valid PostgreSQL syntax (Flyway-style ${placeholders}
+// are tolerated). Used to isolate statements that cannot be analyzed.
+func Parses(sql string) error {
+	sql, _ = substitutePlaceholders(sql, nil)
+	_, err := pgParse(sql)
+	return err
+}

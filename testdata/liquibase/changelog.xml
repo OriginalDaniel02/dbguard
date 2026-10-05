@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <property name="now" value="now()" dbms="postgresql"/>
+  <property name="now" value="sysdate" dbms="oracle"/>
+
+  <changeSet id="1" author="dev">
+    <createTable tableName="widgets">
+      <column name="id" type="bigint"/>
+      <column name="name" type="text"/>
+    </createTable>
+    <createIndex tableName="widgets" indexName="idx_widgets_name">
+      <column name="name"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="2" author="dev">
+    <addColumn tableName="transactions">
+      <column name="note" type="text"/>
+      <column name="created_at" type="timestamptz" defaultValueComputed="${now}"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="3" author="dev">
+    <addColumn tableName="transactions">
+      <column name="score" type="float8" defaultValueComputed="random()"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="4" author="dev">
+    <createIndex tableName="transactions" indexName="idx_tx_amount">
+      <column name="amount"/>
+    </createIndex>
+  </changeSet>
+
+  <!-- dbguard:ignore add-not-null reason: backfilled and enforced by the app since v41 -->
+  <changeSet id="5" author="dev">
+    <addNotNullConstraint tableName="transactions" columnName="ref" columnDataType="text"/>
+  </changeSet>
+
+  <changeSet id="6" author="dev">
+    <modifyDataType tableName="transactions" columnName="amount" newDataType="bigint"/>
+    <addUniqueConstraint tableName="transactions" columnNames="ref" constraintName="uq_tx_ref"/>
+    <addForeignKeyConstraint baseTableName="transactions" baseColumnNames="account_id"
+        referencedTableName="accounts" referencedColumnNames="id" constraintName="fk_tx_acct" validate="false"/>
+    <dropColumn tableName="transactions" columnName="legacy"/>
+  </changeSet>
+
+  <changeSet id="7" author="dev" runInTransaction="false">
+    <sql>CREATE INDEX CONCURRENTLY idx_tx_ref ON transactions (ref)</sql>
+  </changeSet>
+
+  <changeSet id="8" author="dev">
+    <addLookupTable existingTableName="transactions" existingColumnName="kind" newTableName="kinds" newColumnName="kind"/>
+  </changeSet>
+
+  <changeSet id="9" author="dev" dbms="oracle">
+    <createIndex tableName="transactions" indexName="oracle_only"><column name="ref"/></createIndex>
+  </changeSet>
+
+  <changeSet id="10" author="dev">
+    <comment>dbguard:ignore create-index reason: write-quiet during the maintenance window</comment>
+    <createIndex tableName="transactions" indexName="idx_tx_created"><column name="created_at"/></createIndex>
+  </changeSet>
+</databaseChangeLog>

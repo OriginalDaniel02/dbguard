@@ -4,7 +4,7 @@
 
 **Catch migrations that will lock production — before they merge.**
 
-Two tools in one binary. A **pre-flight checker** reads your Flyway migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead. A **schema drift detector** catches when staging and production have quietly diverged from what your migrations say.
+Two tools in one binary. A **pre-flight checker** reads your Flyway or Liquibase migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead. A **schema drift detector** catches when staging and production have quietly diverged from what your migrations say.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml/badge.svg)](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml)
@@ -173,6 +173,43 @@ dbguard check --rows transactions=14000000 --rows audit.events=900000000 V5__x.s
 dbguard check --placeholder schema=app --rows app.orders=5000000 V6__x.sql
 ```
 
+## Liquibase
+
+DB Guard checks Liquibase changelogs in **XML, YAML, JSON and formatted SQL** with the same risk rules, so no second tool or config is needed:
+
+```bash
+dbguard check db/changelog/                      # finds changelogs by content
+dbguard check db/changelog/2026-10-add-index.xml
+```
+
+```text
+db/changelog/2026-10-add-index.xml:33: [HIGH] public.transactions (create-index)
+    this will lock public.transactions (14.0M rows) for approximately 1-6 min
+    safer: CREATE INDEX CONCURRENTLY in a <sql> change with runInTransaction="false" (the createIndex change type cannot do this)
+```
+
+How it works: each `<changeSet>` is translated into the equivalent PostgreSQL statements and analyzed together (so an index on a table created earlier in the same changelog is not flagged). Findings are reported at the line of the `changeSet`. `<property>` values act as `${placeholders}` (respecting `dbms=`), and `dbms=` restrictions on changeSets are honored (a changeSet that only runs on Oracle is skipped).
+
+**Supported change types:** `createTable`, `addColumn` (incl. `defaultValue*`, `autoIncrement`, `nullable`), `dropColumn`, `modifyDataType`, `addNotNullConstraint`, `addUniqueConstraint`, `addPrimaryKey`, `addForeignKeyConstraint` (`validate="false"` is treated as `NOT VALID`), `createIndex`, `sql` and `sqlFile`. Metadata-only or data-only changes (renames, defaults, views, `insert`, ...) are skipped silently. **Any other change type is listed as "not analyzed" in the output** so you can see what was not checked.
+
+**Accepting a risk** works in every format, because the decision belongs in the file:
+
+```xml
+<!-- dbguard:ignore add-not-null reason: backfilled and enforced by the app since v41 -->
+<changeSet id="5" author="dev"> ... </changeSet>
+```
+
+```yaml
+  # dbguard:ignore add-not-null reason: backfilled and enforced by the app since v41
+  - changeSet:
+```
+
+or, in any format including JSON (which has no comments), in the changeSet's own comment:
+
+```yaml
+      comment: "dbguard:ignore create-index reason: write-quiet during the maintenance window"
+```
+
 ## GitHub Actions
 
 Add a workflow that runs on pull requests:
@@ -265,7 +302,7 @@ Please report vulnerabilities privately through GitHub's *Security → Report a 
 DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 
 - **PostgreSQL only.** MySQL is planned.
-- **Flyway SQL migrations only.** Liquibase and Java-based Flyway migrations are not read yet.
+- **Flyway SQL and Liquibase changelogs only.** Java-based Flyway migrations and Liquibase custom change classes are not read. Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
 - **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
 - **`ALTER TABLE` / `CREATE INDEX` coverage.** The rules in the table above are what is detected today. Other statements are ignored, not validated.
 - **Estimates are heuristics.** See [Duration estimates](#duration-estimates-are-ranges-not-promises).
@@ -280,7 +317,8 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | **1** | Go CLI for PostgreSQL, full risk-rule table, Flyway SQL, GitHub Action with PR comments, auditable overrides | Implemented |
 | **2** | **Schema drift detection** (snapshots, comparison, Slack alerts, scheduled job) | Implemented |
 | | GitLab CI | Implemented |
-| | Liquibase, MySQL | Planned |
+| | Liquibase | Implemented |
+| | MySQL | Planned |
 | **3** | VS Code extension for inline feedback, per-table schema changelog | Planned |
 
 Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
@@ -305,6 +343,7 @@ DBGUARD_TEST_DSN='postgres://postgres:secret@localhost:55432/postgres?sslmode=di
 ```text
 cmd/dbguard        CLI entry point (check, snapshot, drift, gitlab-comment)
 internal/flyway    Flyway migration discovery
+internal/liquibase Liquibase changelog parsing and translation
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
 internal/pg        Read-only PostgreSQL statistics and schema snapshots
@@ -318,7 +357,7 @@ gitlab/            GitLab CI template
 internal/gitlab    GitLab merge request comments
 docs/              Rule reference, drift guide, acceptance criteria
 examples/          Ready-to-copy workflows (scheduled drift check)
-testdata/          Sample migrations
+testdata/          Sample migrations (Flyway, Liquibase XML/YAML/JSON/SQL)
 ```
 
 ## Contributing
