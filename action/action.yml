@@ -18,7 +18,7 @@ inputs:
     default: ""
   repository:
     description: GitHub repository that publishes dbguard releases.
-    default: ${{ github.action_repository }}
+    default: ${{ github.action_repository || github.repository }}
 runs:
   using: composite
   steps:
