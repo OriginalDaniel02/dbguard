@@ -49,14 +49,14 @@ func ParseRisk(s string) (Risk, error) {
 
 // Rule IDs, used in findings and in `-- dbguard:ignore <id>` overrides.
 const (
-	AddColumnSafe          = "add-column-safe"
-	AddColumnVolatile      = "add-column-nonconstant-default"
-	AlterColumnType        = "alter-column-type"
-	CreateIndex            = "create-index"
-	AddUniqueOrPK          = "add-unique-or-pk"
-	AddNotNull             = "add-not-null"
-	AddForeignKey          = "add-foreign-key"
-	DropColumn             = "drop-column"
+	AddColumnSafe     = "add-column-safe"
+	AddColumnVolatile = "add-column-nonconstant-default"
+	AlterColumnType   = "alter-column-type"
+	CreateIndex       = "create-index"
+	AddUniqueOrPK     = "add-unique-or-pk"
+	AddNotNull        = "add-not-null"
+	AddForeignKey     = "add-foreign-key"
+	DropColumn        = "drop-column"
 )
 
 // Finding is one rule hit on one statement.
@@ -80,11 +80,27 @@ type Stats interface {
 	Rows(schema, table string) (rows int64, ok bool)
 }
 
+// NotNullChecker is an optional Stats capability: it reports whether the table
+// already has a validated CHECK (col IS NOT NULL) in the database, which lets
+// PG 12+ add NOT NULL without a full scan.
+type NotNullChecker interface {
+	HasNotNullCheck(schema, table, column string) bool
+}
+
 // Options tunes the engine.
 type Options struct {
-	PGVersion int   // e.g. 16; 0 = assume modern (>= 12)
-	LargeRows int64 // tables below this are not considered "large"; default 100_000
-	Stats     Stats // may be nil (sizes unknown => assume large)
+	PGVersion     int               // e.g. 16; 0 = assume modern (>= 12)
+	LargeRows     int64             // tables below this are not considered "large"; default 100_000
+	Stats         Stats             // may be nil (sizes unknown => assume large)
+	DefaultSchema string            // schema for unqualified names; default "public"
+	Placeholders  map[string]string // Flyway ${name} values; unset ones are treated as opaque identifiers
+}
+
+func (o Options) schema() string {
+	if o.DefaultSchema == "" {
+		return "public"
+	}
+	return o.DefaultSchema
 }
 
 func (o Options) largeRows() int64 {
@@ -103,6 +119,9 @@ func (o Options) pg() int {
 
 // Check analyses one migration's SQL and returns findings in statement order.
 func Check(sql string, opts Options) ([]Finding, error) {
+	// Flyway placeholders are not valid SQL; swap them for parseable stand-ins
+	// (same line structure) and restore the original text in the findings.
+	sql, restore := substitutePlaceholders(sql, opts.Placeholders)
 	res, err := parse(sql)
 	if err != nil {
 		return nil, err
@@ -110,6 +129,10 @@ func Check(sql string, opts Options) ([]Finding, error) {
 	e := &engine{sql: sql, opts: opts, created: map[string]bool{}, checks: map[string]bool{}}
 	for _, raw := range res.Stmts {
 		e.stmt(raw)
+	}
+	for i := range e.out {
+		e.out[i].Table = restore(e.out[i].Table)
+		e.out[i].Statement = restore(e.out[i].Statement)
 	}
 	return e.out, nil
 }
@@ -136,7 +159,7 @@ func (e *engine) stmt(raw *pg_query.RawStmt) {
 
 	switch s := raw.Stmt.Node.(type) {
 	case *pg_query.Node_CreateStmt:
-		e.created[qualify(s.CreateStmt.Relation)] = true
+		e.created[e.qualify(s.CreateStmt.Relation)] = true
 	case *pg_query.Node_IndexStmt:
 		e.index(ctx, s.IndexStmt)
 	case *pg_query.Node_AlterTableStmt:
@@ -183,7 +206,7 @@ func (e *engine) alterCmd(c stmtCtx, rel *pg_query.RangeVar, cmd *pg_query.Alter
 	case pg_query.AlterTableType_AT_AddConstraint:
 		e.constraint(c, rel, cmd.Def.GetConstraint())
 	case pg_query.AlterTableType_AT_SetNotNull:
-		if e.checks[qualify(rel)+"."+cmd.Name] && e.opts.pg() >= 12 {
+		if e.opts.pg() >= 12 && (e.checks[e.qualify(rel)+"."+cmd.Name] || e.dbHasNotNullCheck(rel, cmd.Name)) {
 			return // a validated CHECK (col IS NOT NULL) lets PG 12+ skip the scan
 		}
 		e.add(c, rel, AddNotNull, MediumHigh, estimate.Scan,
@@ -217,14 +240,14 @@ func (e *engine) constraint(c stmtCtx, rel *pg_query.RangeVar, con *pg_query.Con
 			"Add the constraint NOT VALID, then VALIDATE CONSTRAINT in a separate step")
 	case pg_query.ConstrType_CONSTR_CHECK:
 		if !con.SkipValidation && isNotNullCheck(con) {
-			e.checks[qualify(rel)+"."+notNullCol(con)] = true
+			e.checks[e.qualify(rel)+"."+notNullCol(con)] = true
 		}
 	}
 }
 
 // add records a finding, applying table-size gating and the time estimate.
 func (e *engine) add(c stmtCtx, rel *pg_query.RangeVar, rule string, base Risk, kind *estimate.Kind, lock, alt string) {
-	table := qualify(rel)
+	table := e.qualify(rel)
 	if e.created[table] {
 		return // table created in this same migration: empty, nothing to lock against
 	}
@@ -250,7 +273,7 @@ func (e *engine) add(c stmtCtx, rel *pg_query.RangeVar, rule string, base Risk, 
 		f.Estimate = &r
 		f.Message = fmt.Sprintf("this will lock %s (%s rows) for approximately %s", table, estimate.HumanRows(f.Rows), r)
 	} else if f.Rows < 0 && rule != DropColumn {
-		f.Message = fmt.Sprintf("table size of %s is unknown; assuming it is large", table)
+		f.Message = fmt.Sprintf("table size of %s is unknown (no connection, or the table has no statistics - run ANALYZE); assuming it is large", table)
 	} else {
 		f.Message = lock
 	}
@@ -333,11 +356,20 @@ func notNullCol(con *pg_query.Constraint) string {
 	return ref.Fields[len(ref.Fields)-1].GetString_().GetSval()
 }
 
-func qualify(r *pg_query.RangeVar) string {
+func (e *engine) qualify(r *pg_query.RangeVar) string {
 	if r.Schemaname == "" {
-		return "public." + r.Relname
+		return e.opts.schema() + "." + r.Relname
 	}
 	return r.Schemaname + "." + r.Relname
+}
+
+func (e *engine) dbHasNotNullCheck(rel *pg_query.RangeVar, col string) bool {
+	c, ok := e.opts.Stats.(NotNullChecker)
+	if !ok {
+		return false
+	}
+	schema, name := splitQualified(e.qualify(rel))
+	return c.HasNotNullCheck(schema, name, col)
 }
 
 func splitQualified(q string) (schema, table string) {

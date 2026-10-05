@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  (run 'dbguard check -h' for flags)")
 		os.Exit(2)
 	}
-	os.Exit(check(os.Args[2:]))
+	os.Exit(check(os.Args[2:], os.Stdout, os.Stderr))
 }
 
 type rowsFlag map[string]int64
@@ -43,27 +44,43 @@ func (r rowsFlag) Set(v string) error {
 	if err != nil {
 		return err
 	}
-	if !strings.Contains(k, ".") {
-		k = "public." + k
-	}
 	r[k] = rows
 	return nil
 }
 
 // Rows makes rowsFlag a rules.Stats for offline use.
 func (r rowsFlag) Rows(schema, table string) (int64, bool) {
-	n, ok := r[schema+"."+table]
+	if n, ok := r[schema+"."+table]; ok {
+		return n, true
+	}
+	n, ok := r[table] // bare name: applies to whichever schema is in effect
 	return n, ok
 }
 
-func check(args []string) int {
+type kvFlag map[string]string
+
+func (k kvFlag) String() string { return "" }
+func (k kvFlag) Set(v string) error {
+	name, val, ok := strings.Cut(v, "=")
+	if !ok || name == "" {
+		return fmt.Errorf("want name=value, got %q", v)
+	}
+	k[name] = val
+	return nil
+}
+
+func check(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	fs.Usage = func() { fmt.Fprintln(os.Stderr, usage); fs.PrintDefaults() }
+	fs.SetOutput(stderr)
+	fs.Usage = func() { fmt.Fprintln(stderr, usage); fs.PrintDefaults() }
 	dsnEnv := fs.String("dsn-env", "DBGUARD_DSN", "name of the env var holding a read-only Postgres connection string")
 	format := fs.String("format", "text", "output format: text | markdown | json")
 	failOn := fs.String("fail-on", "medium-high", "lowest risk that fails the check: low | medium | medium-high | high")
 	large := fs.Int64("large-rows", 100_000, "tables with fewer estimated rows are treated as low risk")
 	pgVer := fs.Int("pg-version", 0, "assumed PostgreSQL major version when not connected (default 16)")
+	schema := fs.String("schema", "", "schema for unqualified table names (default: connection's current_schema, else public)")
+	placeholders := kvFlag{}
+	fs.Var(placeholders, "placeholder", "Flyway placeholder value, name=value (repeatable); unset ${placeholders} are treated as opaque")
 	rows := rowsFlag{}
 	fs.Var(rows, "rows", "offline table size, table=rows (repeatable); used when no DSN is set")
 	if err := fs.Parse(args); err != nil {
@@ -75,20 +92,20 @@ func check(args []string) int {
 	}
 	threshold, err := rules.ParseRisk(*failOn)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "dbguard:", err)
+		fmt.Fprintln(stderr, "dbguard:", err)
 		return 2
 	}
 	files, err := flyway.Collect(fs.Args())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "dbguard:", err)
+		fmt.Fprintln(stderr, "dbguard:", err)
 		return 2
 	}
 
-	opts := rules.Options{PGVersion: *pgVer, LargeRows: *large}
+	opts := rules.Options{PGVersion: *pgVer, LargeRows: *large, DefaultSchema: *schema, Placeholders: placeholders}
 	if dsn := os.Getenv(*dsnEnv); dsn != "" {
 		st, err := pg.Connect(context.Background(), dsn)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "dbguard:", err)
+			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}
 		defer st.Close(context.Background())
@@ -96,10 +113,13 @@ func check(args []string) int {
 		if st.Version > 0 {
 			opts.PGVersion = st.Version
 		}
+		if opts.DefaultSchema == "" {
+			opts.DefaultSchema = st.Schema
+		}
 	} else if len(rows) > 0 {
 		opts.Stats = rows
 	} else {
-		fmt.Fprintf(os.Stderr, "dbguard: $%s not set and no --rows given; table sizes unknown, assuming large\n", *dsnEnv)
+		fmt.Fprintf(stderr, "dbguard: $%s not set and no --rows given; table sizes unknown, assuming large\n", *dsnEnv)
 	}
 
 	var out []report.File
@@ -107,13 +127,13 @@ func check(args []string) int {
 	for _, path := range files {
 		b, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "dbguard:", err)
+			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}
 		sql := string(b)
 		found, err := rules.Check(sql, opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "dbguard: %s: %v\n", path, err)
+			fmt.Fprintf(stderr, "dbguard: %s: %v\n", path, err)
 			return 2
 		}
 		problems := override.Apply(sql, found)
@@ -125,16 +145,16 @@ func check(args []string) int {
 
 	switch *format {
 	case "text":
-		report.Text(os.Stdout, out, threshold)
+		report.Text(stdout, out, threshold)
 	case "markdown":
-		report.Markdown(os.Stdout, out, threshold)
+		report.Markdown(stdout, out, threshold)
 	case "json":
-		if err := report.JSON(os.Stdout, out); err != nil {
-			fmt.Fprintln(os.Stderr, "dbguard:", err)
+		if err := report.JSON(stdout, out); err != nil {
+			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "dbguard: unknown format %q\n", *format)
+		fmt.Fprintf(stderr, "dbguard: unknown format %q\n", *format)
 		return 2
 	}
 	if blocking {

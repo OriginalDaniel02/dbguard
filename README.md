@@ -7,6 +7,7 @@
 A pre-flight checker for PostgreSQL schema migrations. It reads your Flyway migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml/badge.svg)](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml)
 ![Status](https://img.shields.io/badge/status-v0.1%20pre--release-orange)
 ![Go](https://img.shields.io/badge/built%20with-Go-00ADD8)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12%2B-336791)
@@ -79,7 +80,7 @@ DB Guard exits `0` when nothing blocks, `1` when it finds blocking risks, and `2
 | `ALTER COLUMN ... TYPE` | Full table rewrite under `ACCESS EXCLUSIVE` | High | Add a new column, backfill, swap, drop the old one |
 | `CREATE INDEX` (not `CONCURRENTLY`) | `SHARE` lock blocks writes for the whole build | High | `CREATE INDEX CONCURRENTLY` |
 | `ADD UNIQUE` / `ADD PRIMARY KEY` (without `USING INDEX`) | `ACCESS EXCLUSIVE` while the index builds | High | Build the index `CONCURRENTLY`, then `ADD CONSTRAINT ... USING INDEX` |
-| `SET NOT NULL` | Full scan under `ACCESS EXCLUSIVE` (not flagged on PG 12+ when a validated `CHECK (col IS NOT NULL)` was added earlier in the same migration; a check that already exists in the database is not yet detected) | Medium-high | `NOT VALID` check, `VALIDATE` separately, then `SET NOT NULL` |
+| `SET NOT NULL` | Full scan under `ACCESS EXCLUSIVE` (not flagged on PG 12+ when a validated `CHECK (col IS NOT NULL)` already exists in the database or was added earlier in the same migration) | Medium-high | `NOT VALID` check, `VALIDATE` separately, then `SET NOT NULL` |
 | `ADD FOREIGN KEY` (not `NOT VALID`) | Locks both tables and scans the referencing table | Medium-high | Add `NOT VALID`, then `VALIDATE CONSTRAINT` in a separate step |
 | `DROP COLUMN` | Metadata-only, but running code reading the column breaks | Low | Deploy code that stops reading the column first |
 
@@ -133,8 +134,10 @@ dbguard check [flags] <migration-file-or-dir>...
 | `--dsn-env` | `DBGUARD_DSN` | Name of the environment variable holding the read-only connection string |
 | `--rows` | — | Offline table size as `table=rows` (repeatable); used when no DSN is set |
 | `--pg-version` | `16` | Assumed PostgreSQL major version when not connected |
+| `--schema` | *(connection's `current_schema()`, else `public`)* | Schema for unqualified table names |
+| `--placeholder` | — | Flyway placeholder value as `name=value` (repeatable) |
 
-If neither a connection string nor `--rows` is provided, table sizes are unknown and DB Guard conservatively assumes tables are large.
+If neither a connection string nor `--rows` is provided, table sizes are unknown and DB Guard conservatively assumes tables are large. The same applies to a table that has data but **no statistics** (never analyzed): it is reported as unknown, never as "0 rows", so a freshly loaded big table can't slip through as small. Run `ANALYZE` on it, or pass `--rows`.
 
 ### Examples
 
@@ -147,6 +150,9 @@ dbguard check --fail-on high db/migration
 
 # Fully offline, specifying sizes for two tables (schema defaults to public)
 dbguard check --rows transactions=14000000 --rows audit.events=900000000 V5__x.sql
+
+# Migration uses Flyway placeholders: ${schema}.orders
+dbguard check --placeholder schema=app --rows app.orders=5000000 V6__x.sql
 ```
 
 ## GitHub Actions
@@ -221,10 +227,11 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 
 - **PostgreSQL only.** MySQL is planned.
 - **Flyway SQL migrations only.** Liquibase and Java-based Flyway migrations are not read yet.
-- **Flyway placeholders** (`${placeholder}`) are not substituted before parsing; a file that uses them in SQL positions may fail to parse and exit `2`.
+- **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
 - **`ALTER TABLE` / `CREATE INDEX` coverage.** The rules in the table above are what is detected today. Other statements are ignored, not validated.
 - **Estimates are heuristics.** See [Duration estimates](#duration-estimates-are-ranges-not-promises).
-- **Table names assume the default `public` schema** when a statement is unqualified.
+- **Unqualified names** use the connection's `current_schema()` (or `--schema`, else `public`); a `SET search_path` inside the migration is not followed.
+- **Estimates don't consider column type or width.** A text-column index build is slower than an integer one; the range is deliberately wide to cover both.
 - DB Guard **warns and suggests**; it never rewrites your migration files.
 
 ## Roadmap
@@ -240,7 +247,7 @@ Schema drift detection answers a different question — *has someone changed pro
 ## Development
 
 ```bash
-go test ./...        # unit tests
+go test ./...        # unit tests (CI also runs the integration tests against PostgreSQL 16)
 go vet ./...
 ```
 
@@ -269,7 +276,7 @@ testdata/          Sample migrations
 
 ## Contributing
 
-Issues and pull requests are welcome. The thing that matters most for this tool is **accuracy**: a rule that cries wolf gets the whole tool ignored. If you open a false-positive or false-negative report, include the migration SQL, the PostgreSQL version, and what actually happened in your database. New rules should come with a test and, ideally, evidence of the real lock behavior.
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md). The thing that matters most for this tool is **accuracy**: a rule that cries wolf gets the whole tool ignored. If you open a false-positive or false-negative report, include the migration SQL, the PostgreSQL version, and what actually happened in your database. New rules should come with a test and, ideally, evidence of the real lock behavior.
 
 ## License
 
