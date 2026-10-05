@@ -1,0 +1,64 @@
+# Scheduled schema drift check. Copy to .github/workflows/drift-check.yml.
+#
+# 1. Builds the schema your migrations *should* produce, by running them against an
+#    empty scratch PostgreSQL (your own migration tool does this; DB Guard never runs migrations).
+# 2. Snapshots that as the expected schema.
+# 3. Compares staging and production to it, read-only, and alerts Slack on any difference.
+#
+# Secrets: STAGING_READONLY_DSN, PROD_READONLY_DSN, SLACK_WEBHOOK_URL
+name: Schema drift check
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily; a manual change is flagged within one run
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    services:
+      scratch:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: scratch
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dbguard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.1.0 -R OriginalDaniel02/dbguard -p dbguard_linux_amd64 -p checksums.txt -D dl
+          (cd dl && grep ' dbguard_linux_amd64$' checksums.txt | sha256sum -c -)
+          install -m 0755 dl/dbguard_linux_amd64 /usr/local/bin/dbguard
+
+      - name: Build the expected schema from migrations (scratch DB)
+        run: |
+          docker run --rm --network host -v "$PWD/db/migration:/flyway/sql:ro" flyway/flyway:10 \
+            -url=jdbc:postgresql://localhost:5432/postgres -user=postgres -password=scratch migrate
+          DBGUARD_DSN='postgres://postgres:scratch@localhost:5432/postgres?sslmode=disable' \
+            dbguard snapshot --out expected.json
+
+      - name: Compare environments with the expected schema
+        env:
+          STAGING_DSN: ${{ secrets.STAGING_READONLY_DSN }}
+          PROD_DSN: ${{ secrets.PROD_READONLY_DSN }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          dbguard drift --expected expected.json \
+            --env staging=STAGING_DSN --env production=PROD_DSN \
+            --ignore-file .dbguard-ignore \
+            --slack-env SLACK_WEBHOOK \
+            --save-dir snapshots
+
+      - name: Keep snapshots as history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-snapshots
+          path: snapshots/
+          retention-days: 90

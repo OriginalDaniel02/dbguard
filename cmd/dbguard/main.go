@@ -17,19 +17,32 @@ import (
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
-const usage = `usage: dbguard check [flags] <migration-file-or-dir>...
+const usage = `usage: dbguard <command> [flags]
 
+commands:
+  check     check Flyway migrations for risky locking operations
+  snapshot  capture a read-only schema snapshot as JSON
+  drift     compare live environments with the expected schema
+
+usage of check: dbguard check [flags] <migration-file-or-dir>...
 Exit codes: 0 = no blocking findings, 1 = blocking findings, 2 = error.
 
-flags:`
+flags of check:`
 
 func main() {
-	if len(os.Args) < 2 || os.Args[1] != "check" {
-		fmt.Fprintln(os.Stderr, usage)
-		fmt.Fprintln(os.Stderr, "  (run 'dbguard check -h' for flags)")
-		os.Exit(2)
+	if len(os.Args) >= 2 {
+		switch os.Args[1] {
+		case "check":
+			os.Exit(check(os.Args[2:], os.Stdout, os.Stderr))
+		case "snapshot":
+			os.Exit(snapshotCmd(os.Args[2:], os.Stdout, os.Stderr))
+		case "drift":
+			os.Exit(driftCmd(os.Args[2:], os.Stdout, os.Stderr))
+		}
 	}
-	os.Exit(check(os.Args[2:], os.Stdout, os.Stderr))
+	fmt.Fprintln(os.Stderr, usage)
+	fmt.Fprintln(os.Stderr, "  (run 'dbguard <command> -h' for flags)")
+	os.Exit(2)
 }
 
 type rowsFlag map[string]int64

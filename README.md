@@ -4,7 +4,7 @@
 
 **Catch migrations that will lock production — before they merge.**
 
-A pre-flight checker for PostgreSQL schema migrations. It reads your Flyway migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead.
+Two tools in one binary. A **pre-flight checker** reads your Flyway migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead. A **schema drift detector** catches when staging and production have quietly diverged from what your migrations say.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml/badge.svg)](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml)
@@ -93,6 +93,24 @@ DB Guard exits `0` when nothing blocks, `1` when it finds blocking risks, and `2
 ### Duration estimates are ranges, not promises
 
 Actual lock time depends on load, concurrent queries, hardware, `maintenance_work_mem`, and column types. DB Guard reports a range derived from throughput measured on PostgreSQL 16 (about 3M rows on a laptop for the slow end, widened for server-class hardware at the fast end). Treat them as an order-of-magnitude warning, and calibrate the constants in [`internal/estimate`](internal/estimate/estimate.go) for your own environment.
+
+## Schema drift detection
+
+During an incident someone runs a manual `ALTER TABLE` on production and forgets the migration. Weeks later a new migration assumes the old schema and fails, and nobody knows why the environments don't match. `dbguard drift` compares each environment's live schema with the schema your migrations should produce and says exactly what differs:
+
+```bash
+# expected.json: snapshot of a scratch DB after running your migrations
+dbguard drift --expected expected.json   --env staging=STAGING_DSN --env production=PROD_DSN   --ignore-file .dbguard-ignore --slack-env SLACK_WEBHOOK
+```
+
+```text
+staging: no drift
+production: 2 difference(s)
+  - column public.orders.discount was added outside migrations (numeric)
+  - index public.orders.orders_total_idx is missing (expected CREATE INDEX orders_total_idx ON ...)
+```
+
+It runs as a scheduled job (a ready-made GitHub Actions workflow is in [`examples/drift-check.yml`](examples/drift-check.yml)), is read-only, supports ignore patterns for intentional differences, and posts to Slack when it finds drift. See [docs/drift.md](docs/drift.md).
 
 ## Installation
 
@@ -240,10 +258,11 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | Phase | Scope | Status |
 |---|---|---|
 | **1** | Go CLI for PostgreSQL, full risk-rule table, Flyway SQL, GitHub Action with PR comments, auditable overrides | Implemented |
-| **2** | Liquibase, MySQL, **schema drift detection** (scheduled snapshots, comparison against migration history, Slack alerts), GitLab CI | Planned |
+| **2** | **Schema drift detection** (snapshots, comparison, Slack alerts, scheduled job) | Implemented |
+| | Liquibase, MySQL, GitLab CI | Planned |
 | **3** | VS Code extension for inline feedback, per-table schema changelog | Planned |
 
-Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check.
+Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
 
 ## Development
 
@@ -263,15 +282,19 @@ DBGUARD_TEST_DSN='postgres://postgres:secret@localhost:55432/postgres?sslmode=di
 ### Project layout
 
 ```text
-cmd/dbguard        CLI entry point (dbguard check)
+cmd/dbguard        CLI entry point (check, snapshot, drift)
 internal/flyway    Flyway migration discovery
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
-internal/pg        Read-only PostgreSQL statistics
+internal/pg        Read-only PostgreSQL statistics and schema snapshots
 internal/override  Auditable in-file overrides
+internal/snapshot  Normalized schema snapshot model (JSON)
+internal/drift     Snapshot comparison and ignore rules
+internal/notify    Slack alerts
 internal/report    Text / Markdown / JSON output
 action/            GitHub Action
-docs/              Rule reference and acceptance criteria
+docs/              Rule reference, drift guide, acceptance criteria
+examples/          Ready-to-copy workflows (scheduled drift check)
 testdata/          Sample migrations
 ```
 
