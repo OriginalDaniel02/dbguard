@@ -190,7 +190,7 @@ db/changelog/2026-10-add-index.xml:33: [HIGH] public.transactions (create-index)
 
 How it works: each `<changeSet>` is translated into the equivalent PostgreSQL statements and analyzed together (so an index on a table created earlier in the same changelog is not flagged). Findings are reported at the line of the `changeSet`. `<property>` values act as `${placeholders}` (respecting `dbms=`), and `dbms=` restrictions on changeSets are honored (a changeSet that only runs on Oracle is skipped).
 
-**Supported change types:** `createTable`, `addColumn` (incl. `defaultValue*`, `autoIncrement`, `nullable`), `dropColumn`, `modifyDataType`, `addNotNullConstraint`, `addUniqueConstraint`, `addPrimaryKey`, `addForeignKeyConstraint` (`validate="false"` is treated as `NOT VALID`), `createIndex`, `sql` and `sqlFile`. Metadata-only or data-only changes (renames, defaults, views, `insert`, ...) are skipped silently. **Any other change type is listed as "not analyzed" in the output** so you can see what was not checked.
+**Supported change types:** `createTable`, `addColumn` (incl. `defaultValue*`, `autoIncrement`, `nullable`), `dropColumn`, `modifyDataType`, `addNotNullConstraint`, `addUniqueConstraint`, `addPrimaryKey`, `addForeignKeyConstraint` (`validate="false"` is treated as `NOT VALID`), `createIndex`, `addLookupTable`, `sql` and `sqlFile`. Metadata-only or data-only changes (renames, defaults, views, `insert`, ...) are skipped silently. **Any other change type is listed as "not analyzed" in the output** so you can see what was not checked.
 
 **Accepting a risk** works in every format, because the decision belongs in the file:
 

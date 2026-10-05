@@ -40,6 +40,9 @@
       "comment": "dbguard:ignore create-index reason: write-quiet during the maintenance window",
       "changes": [
       {"createIndex": {"tableName": "transactions", "indexName": "idx_tx_created", "columns": [
-        {"column": {"name": "created_at"}}]}}]}}
+        {"column": {"name": "created_at"}}]}}]}},
+    {"changeSet": {"id": "11", "author": "dev", "changes": [
+      {"mergeColumns": {"tableName": "transactions", "column1Name": "first_name", "joinString": " ",
+        "column2Name": "last_name", "finalColumnName": "full_name", "finalColumnType": "text"}}]}}
   ]
 }

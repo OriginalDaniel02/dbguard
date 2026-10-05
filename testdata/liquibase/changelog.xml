@@ -65,4 +65,9 @@
     <comment>dbguard:ignore create-index reason: write-quiet during the maintenance window</comment>
     <createIndex tableName="transactions" indexName="idx_tx_created"><column name="created_at"/></createIndex>
   </changeSet>
+
+  <changeSet id="11" author="dev">
+    <mergeColumns tableName="transactions" column1Name="first_name" joinString=" " column2Name="last_name"
+        finalColumnName="full_name" finalColumnType="text"/>
+  </changeSet>
 </databaseChangeLog>

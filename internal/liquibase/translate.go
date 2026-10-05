@@ -51,6 +51,7 @@ var handled = map[string]bool{
 	"createTable": true, "addColumn": true, "dropColumn": true, "modifyDataType": true,
 	"addNotNullConstraint": true, "addUniqueConstraint": true, "addPrimaryKey": true,
 	"addForeignKeyConstraint": true, "createIndex": true, "sql": true, "sqlFile": true,
+	"addLookupTable": true,
 }
 
 // translateChange returns the PostgreSQL statements for one change, or nil if
@@ -146,6 +147,23 @@ func translateChange(ch *node, dir string) ([]string, error) {
 			name = q(n) + " "
 		}
 		return []string{fmt.Sprintf("CREATE %sINDEX %sON %s (%s)", unique, name, t, strings.Join(cols, ", "))}, nil
+
+	case "addLookupTable":
+		// Liquibase builds the lookup table from the distinct values, then adds a
+		// foreign key on the existing table (validated: it scans that table).
+		existing := tableRef(ch.attr("existingTableSchemaName"), ch.attr("existingTableName"))
+		lookup := tableRef(ch.attr("newTableSchemaName"), ch.attr("newTableName"))
+		col, newCol := ch.attr("existingColumnName"), ch.attr("newColumnName")
+		fk := ch.attr("constraintName")
+		if fk == "" {
+			fk = "FK_" + strings.ToUpper(ch.attr("existingTableName")) + "_" + strings.ToUpper(ch.attr("newTableName"))
+		}
+		return []string{
+			fmt.Sprintf("CREATE TABLE %s AS SELECT DISTINCT %s AS %s FROM %s WHERE %s IS NOT NULL", lookup, q(col), q(newCol), existing, q(col)),
+			fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s SET NOT NULL", lookup, q(newCol)),
+			fmt.Sprintf("ALTER TABLE %s ADD PRIMARY KEY (%s)", lookup, q(newCol)),
+			fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)", existing, q(fk), q(col), lookup, q(newCol)),
+		}, nil
 
 	case "sql":
 		text := strings.TrimSpace(ch.text)

@@ -52,6 +52,9 @@ func TestRules(t *testing.T) {
 		{"drop column", "ALTER TABLE transactions DROP COLUMN old;", DropColumn, Low, false},
 		{"small table downgraded", "CREATE INDEX idx ON tiny (a);", CreateIndex, Low, false},
 		{"new table in same migration", "CREATE TABLE fresh (a int); CREATE INDEX idx ON fresh (a);", "", 0, false},
+		{"table built by CREATE TABLE AS", "CREATE TABLE kinds AS SELECT DISTINCT kind FROM transactions; ALTER TABLE kinds ADD PRIMARY KEY (kind);", "", 0, false},
+		{"table built by SELECT INTO", "SELECT DISTINCT kind INTO kinds2 FROM transactions; CREATE INDEX i ON kinds2 (kind);", "", 0, false},
+		{"materialized view indexed in the same migration", "CREATE MATERIALIZED VIEW mv AS SELECT 1 AS a; CREATE UNIQUE INDEX mv_a ON mv (a);", "", 0, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

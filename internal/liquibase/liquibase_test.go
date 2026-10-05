@@ -52,6 +52,10 @@ func TestTranslation(t *testing.T) {
 		`ALTER TABLE "transactions" ADD CONSTRAINT "fk_tx_acct" FOREIGN KEY ("account_id") REFERENCES "accounts" ("id") NOT VALID;`,
 		`ALTER TABLE "transactions" DROP COLUMN "legacy";`,
 		`CREATE INDEX CONCURRENTLY idx_tx_ref ON transactions (ref);`,
+		// addLookupTable, as real Liquibase generates it:
+		`CREATE TABLE "kinds" AS SELECT DISTINCT "kind" AS "kind" FROM "transactions" WHERE "kind" IS NOT NULL;`,
+		`ALTER TABLE "kinds" ADD PRIMARY KEY ("kind");`,
+		`ALTER TABLE "transactions" ADD CONSTRAINT "FK_TRANSACTIONS_KINDS" FOREIGN KEY ("kind") REFERENCES "kinds" ("kind");`,
 	} {
 		if !strings.Contains(sql, want) {
 			t.Errorf("missing statement %q in:\n%s", want, sql)
@@ -63,8 +67,8 @@ func TestTranslation(t *testing.T) {
 	if c.Properties["now"] != "now()" {
 		t.Errorf("the postgresql property must win over the oracle one: %q", c.Properties["now"])
 	}
-	if len(c.Changesets) != 9 {
-		t.Errorf("want 9 changesets (the oracle-only one excluded), got %d", len(c.Changesets))
+	if len(c.Changesets) != 10 {
+		t.Errorf("want 10 changesets (the oracle-only one excluded), got %d", len(c.Changesets))
 	}
 }
 
@@ -72,7 +76,7 @@ func TestUnsupportedChangeTypesAreReportedNotSilentlySkipped(t *testing.T) {
 	c, _ := load(t, "changelog.xml")
 	var found bool
 	for _, p := range c.Combine(nil).Problems {
-		if strings.Contains(p, "addLookupTable") && strings.Contains(p, "not analyzed") {
+		if strings.Contains(p, "mergeColumns") && strings.Contains(p, "not analyzed") {
 			found = true
 		}
 	}

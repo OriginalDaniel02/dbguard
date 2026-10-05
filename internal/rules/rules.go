@@ -141,7 +141,7 @@ func Check(sql string, opts Options) ([]Finding, error) {
 type engine struct {
 	sql     string
 	opts    Options
-	created map[string]bool // tables created earlier in this migration (empty => no lock risk)
+	created map[string]bool // relations created earlier in this migration: invisible to other sessions, so no lock risk
 	checks  map[string]bool // "table.col" with a validated IS NOT NULL CHECK in this migration
 	out     []Finding
 }
@@ -161,6 +161,16 @@ func (e *engine) stmt(raw *pg_query.RawStmt) {
 	switch s := raw.Stmt.Node.(type) {
 	case *pg_query.Node_CreateStmt:
 		e.created[e.qualify(s.CreateStmt.Relation)] = true
+	case *pg_query.Node_SelectStmt:
+		if into := s.SelectStmt.IntoClause; into != nil && into.Rel != nil { // SELECT ... INTO newtable
+			e.created[e.qualify(into.Rel)] = true
+		}
+	case *pg_query.Node_CreateTableAsStmt:
+		// CREATE TABLE ... AS, SELECT INTO, CREATE MATERIALIZED VIEW: populated, but still
+		// created in this migration's transaction, so invisible to other sessions.
+		if into := s.CreateTableAsStmt.Into; into != nil && into.Rel != nil {
+			e.created[e.qualify(into.Rel)] = true
+		}
 	case *pg_query.Node_IndexStmt:
 		e.index(ctx, s.IndexStmt)
 	case *pg_query.Node_AlterTableStmt:

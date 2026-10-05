@@ -39,6 +39,7 @@ func summary(t *testing.T, path string) (summaries []string, files []report.File
 func TestLiquibaseAllFormatsReportTheSameFindings(t *testing.T) {
 	want := []string{
 		"add-column-nonconstant-default", // changeSet 3: random()
+		"add-foreign-key",                // changeSet 8: addLookupTable adds a validated FK on the big table
 		"add-not-null:acknowledged",      // changeSet 5: override (comment above / changeSet comment)
 		"add-unique-or-pk",               // changeSet 6
 		"alter-column-type",              // changeSet 6
@@ -59,7 +60,7 @@ func TestLiquibaseAllFormatsReportTheSameFindings(t *testing.T) {
 		}
 		var skipped bool
 		for _, p := range files[0].Problems {
-			skipped = skipped || (strings.Contains(p, "addLookupTable") && strings.Contains(p, "not analyzed"))
+			skipped = skipped || (strings.Contains(p, "mergeColumns") && strings.Contains(p, "not analyzed"))
 		}
 		if !skipped {
 			t.Errorf("%s: unanalyzed change type must be listed: %v", f, files[0].Problems)
