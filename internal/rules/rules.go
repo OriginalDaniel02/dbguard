@@ -57,6 +57,12 @@ const (
 	AddNotNull        = "add-not-null"
 	AddForeignKey     = "add-foreign-key"
 	DropColumn        = "drop-column"
+
+	// MySQL-specific rules (online DDL: INSTANT / INPLACE / COPY).
+	TableCopy    = "table-copy"           // ALGORITHM=COPY: the table is copied and writes are blocked
+	BlocksWrites = "blocks-writes"        // INPLACE but only with LOCK=SHARED, or an explicit blocking LOCK clause
+	TableRebuild = "table-rebuild"        // INPLACE rebuild: writes continue, but it is heavy
+	AddCheck     = "add-check-constraint" // ADD CHECK copies the table in MySQL
 )
 
 // Finding is one rule hit on one statement.
@@ -95,6 +101,27 @@ type Options struct {
 	DefaultSchema string            // schema for unqualified names; default "public"
 	Placeholders  map[string]string // ${name} values; unset ones are treated as opaque identifiers
 	Tool          string            // "flyway" (default) or "liquibase": tailors the suggested alternatives
+	MySQLVersion  int               // major*10000 + minor*100 + patch, e.g. 80036; 0 = assume 8.0.36
+}
+
+// ColumnInfo is what the database says about an existing column (MySQL).
+type ColumnInfo struct {
+	Type    string // information_schema COLUMN_TYPE, e.g. "varchar(30)", "int", "bigint unsigned"
+	NotNull bool
+	Charset string // e.g. "utf8mb4"; empty for non-text columns
+}
+
+// ColumnTyper is an optional Stats capability: it lets the MySQL rules tell a
+// type change (table copy) from a nullability-only change (online).
+type ColumnTyper interface {
+	Column(schema, table, column string) (ColumnInfo, bool)
+}
+
+func (o Options) my() int {
+	if o.MySQLVersion <= 0 {
+		return 80036
+	}
+	return o.MySQLVersion
 }
 
 func (o Options) schema() string {

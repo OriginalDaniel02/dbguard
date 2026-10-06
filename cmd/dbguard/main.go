@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/OriginalDaniel02/dbguard/internal/mysqldb"
 	"github.com/OriginalDaniel02/dbguard/internal/pg"
 	"github.com/OriginalDaniel02/dbguard/internal/report"
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
@@ -87,11 +88,13 @@ func check(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprintln(stderr, usage); fs.PrintDefaults() }
-	dsnEnv := fs.String("dsn-env", "DBGUARD_DSN", "name of the env var holding a read-only Postgres connection string")
+	dsnEnv := fs.String("dsn-env", "DBGUARD_DSN", "name of the env var holding a read-only PostgreSQL or MySQL connection string")
 	format := fs.String("format", "text", "output format: text | markdown | json")
 	failOn := fs.String("fail-on", "medium-high", "lowest risk that fails the check: low | medium | medium-high | high")
 	large := fs.Int64("large-rows", 100_000, "tables with fewer estimated rows are treated as low risk")
 	pgVer := fs.Int("pg-version", 0, "assumed PostgreSQL major version when not connected (default 16)")
+	engineFlag := fs.String("engine", "", "database engine: postgres | mysql (default: from the connection string, else postgres)")
+	myVer := fs.String("mysql-version", "", "assumed MySQL version when not connected, e.g. 8.0.28 (default 8.0.36)")
 	schema := fs.String("schema", "", "schema for unqualified table names (default: connection's current_schema, else public)")
 	placeholders := kvFlag{}
 	fs.Var(placeholders, "placeholder", "Flyway placeholder value, name=value (repeatable); unset ${placeholders} are treated as opaque")
@@ -116,7 +119,49 @@ func check(args []string, stdout, stderr io.Writer) int {
 	}
 
 	opts := rules.Options{PGVersion: *pgVer, LargeRows: *large, DefaultSchema: *schema, Placeholders: placeholders}
-	if dsn := os.Getenv(*dsnEnv); dsn != "" {
+	dsn := os.Getenv(*dsnEnv)
+	engine := *engineFlag
+	if engine == "" {
+		engine = "postgres"
+		if dsn != "" && mysqldb.IsMySQLDSN(dsn) {
+			engine = "mysql"
+		}
+	}
+	if engine != "postgres" && engine != "mysql" {
+		fmt.Fprintf(stderr, "dbguard: unknown --engine %q (want postgres or mysql)\n", engine)
+		return 2
+	}
+	if dsn != "" && (engine == "mysql") != mysqldb.IsMySQLDSN(dsn) {
+		fmt.Fprintf(stderr, "dbguard: the connection string in $%s is not a %s connection string\n", *dsnEnv, engine)
+		return 2
+	}
+	if *myVer != "" {
+		v, _ := mysqldb.ParseVersion(*myVer)
+		if v == 0 {
+			fmt.Fprintf(stderr, "dbguard: cannot read --mysql-version %q (want e.g. 8.0.28)\n", *myVer)
+			return 2
+		}
+		opts.MySQLVersion = v
+	}
+	switch {
+	case dsn != "" && engine == "mysql":
+		st, err := mysqldb.Connect(context.Background(), dsn)
+		if err != nil {
+			fmt.Fprintln(stderr, "dbguard:", err)
+			return 2
+		}
+		defer st.Close()
+		opts.Stats = st
+		if st.Version > 0 {
+			opts.MySQLVersion = st.Version
+		}
+		if opts.DefaultSchema == "" {
+			opts.DefaultSchema = st.Schema
+		}
+		if st.Flavor == "MariaDB" {
+			fmt.Fprintln(stderr, "dbguard: warning: connected to MariaDB; the MySQL rules target MySQL 8.0 and MariaDB's online DDL differs")
+		}
+	case dsn != "":
 		st, err := pg.Connect(context.Background(), dsn)
 		if err != nil {
 			fmt.Fprintln(stderr, "dbguard:", err)
@@ -130,9 +175,9 @@ func check(args []string, stdout, stderr io.Writer) int {
 		if opts.DefaultSchema == "" {
 			opts.DefaultSchema = st.Schema
 		}
-	} else if len(rows) > 0 {
+	case len(rows) > 0:
 		opts.Stats = rows
-	} else {
+	default:
 		fmt.Fprintf(stderr, "dbguard: $%s not set and no --rows given; table sizes unknown, assuming large\n", *dsnEnv)
 	}
 
@@ -144,7 +189,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}
-		found, problems, err := analyze(path, string(b), opts)
+		found, problems, err := analyze(path, string(b), opts, engine)
 		if err != nil {
 			fmt.Fprintf(stderr, "dbguard: %s: %v\n", path, err)
 			return 2

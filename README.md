@@ -11,6 +11,7 @@ Two tools in one binary. A **pre-flight checker** reads your Flyway or Liquibase
 ![Status](https://img.shields.io/badge/status-v0.1%20pre--release-orange)
 ![Go](https://img.shields.io/badge/built%20with-Go-00ADD8)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12%2B-336791)
+![MySQL](https://img.shields.io/badge/MySQL-8.0%2B-4479A1)
 
 </div>
 
@@ -38,6 +39,7 @@ dbguard: 1 blocking finding(s)
 - **CI is the enforcement point.** A GitHub Action comments on the pull request and fails the check. The editor is optional; the pipeline is not.
 - **Auditable overrides.** Accept a risk with a comment in the migration file itself, so the decision lives in git history and code review.
 - **Read-only by construction.** Every session is forced read-only. DB Guard never needs, and cannot use, write access.
+- **PostgreSQL and MySQL.** Rules for each engine's real locking behavior, measured against real servers.
 - **Zero-dependency install.** One static binary. No JVM, no runtime, no C toolchain.
 
 ## Quick start
@@ -93,6 +95,24 @@ DB Guard exits `0` when nothing blocks, `1` when it finds blocking risks, and `2
 ### Duration estimates are ranges, not promises
 
 Actual lock time depends on load, concurrent queries, hardware, `maintenance_work_mem`, and column types. DB Guard reports a range derived from throughput measured on PostgreSQL 16 (about 3M rows on a laptop for the slow end, widened for server-class hardware at the fast end). Treat them as an order-of-magnitude warning, and calibrate the constants in [`internal/estimate`](internal/estimate/estimate.go) for your own environment.
+
+## MySQL
+
+`dbguard check` also analyzes MySQL migrations. MySQL's question is not *which lock* but *which online-DDL algorithm*: `INSTANT` and `INPLACE`/`LOCK=NONE` keep writes flowing, while `COPY` blocks them. DB Guard classifies each statement accordingly:
+
+```bash
+export DBGUARD_DSN='mysql://readonly:...@db.internal:3306/shop'   # engine is detected from the URL
+dbguard check db/migration
+dbguard check --engine mysql --rows orders=14000000 V3__add_check.sql   # offline
+```
+
+```text
+V3__add_check.sql:1: [HIGH] orders (add-check-constraint)
+    this will block writes to orders (14.0M rows) for approximately 2-20 min
+    safer: Add the CHECK to the CREATE TABLE of a new table, or enforce it in the application; use gh-ost / pt-online-schema-change for existing big tables
+```
+
+The classification was **measured on a real MySQL 8.0.46** rather than copied from the manual, and some results are surprising: `ADD CHECK` and `ADD FOREIGN KEY` copy the whole table, and any parenthesized `DEFAULT (...)`, even `DEFAULT (5)`, forces a copy. Connected to the database, DB Guard reads the live column definition to tell a type change (copy) from a nullability change (online). See [docs/mysql.md](docs/mysql.md) for the full table, the version gates (8.0.29) and the caveats (metadata locks).
 
 ## Schema drift detection
 
@@ -301,7 +321,7 @@ Please report vulnerabilities privately through GitHub's *Security → Report a 
 
 DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 
-- **PostgreSQL only.** MySQL is planned.
+- **PostgreSQL and MySQL** (8.0/8.4; 5.7 approximated). MariaDB is detected and warned about: its online DDL differs. The schema drift detector is PostgreSQL only for now.
 - **Flyway SQL and Liquibase changelogs only.** Java-based Flyway migrations and Liquibase custom change classes are not read. Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
 - **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
 - **`ALTER TABLE` / `CREATE INDEX` coverage.** The rules in the table above are what is detected today. Other statements are ignored, not validated.
@@ -318,7 +338,7 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | **2** | **Schema drift detection** (snapshots, comparison, Slack alerts, scheduled job) | Implemented |
 | | GitLab CI | Implemented |
 | | Liquibase | Implemented |
-| | MySQL | Planned |
+| | MySQL (`check`) | Implemented |
 | **3** | VS Code extension for inline feedback, per-table schema changelog | Planned |
 
 Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
@@ -347,6 +367,7 @@ internal/liquibase Liquibase changelog parsing and translation
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
 internal/pg        Read-only PostgreSQL statistics and schema snapshots
+internal/mysqldb   Read-only MySQL statistics
 internal/override  Auditable in-file overrides
 internal/snapshot  Normalized schema snapshot model (JSON)
 internal/drift     Snapshot comparison and ignore rules

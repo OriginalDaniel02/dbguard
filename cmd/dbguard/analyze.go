@@ -17,10 +17,14 @@ import (
 // analyze checks one migration file. Plain SQL (Flyway, or Liquibase "formatted
 // SQL") goes straight to the rules; Liquibase XML/YAML/JSON changelogs are first
 // translated to the equivalent PostgreSQL. It returns findings and non-fatal problems.
-func analyze(path, text string, opts rules.Options) ([]rules.Finding, []string, error) {
+func analyze(path, text string, opts rules.Options, engine string) ([]rules.Finding, []string, error) {
 	if !liquibase.IsStructured(path) {
 		if liquibase.Sniff(path, []byte(head(text))) {
 			opts.Tool = "liquibase"
+		}
+		if engine == "mysql" {
+			found, problems := rules.CheckMySQLLenient(text, opts)
+			return found, append(problems, override.Apply(text, found)...), nil
 		}
 		found, err := rules.Check(text, opts)
 		if err != nil {

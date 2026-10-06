@@ -28,6 +28,14 @@ var (
 	IndexBuild = &Kind{"index-build", 40_000, 400_000}
 	// Scan: validating a constraint by scanning the table (NOT NULL, FOREIGN KEY).
 	Scan = &Kind{"scan", 300_000, 2_000_000}
+
+	// MySQL 8.0.46 (InnoDB) in Docker on a laptop, 3M rows: table copies 12.7k (ADD FOREIGN KEY,
+	// which also validates) to 30.6k rows/s (MODIFY int->bigint, ADD CHECK); in-place rebuilds
+	// 38-40k; secondary index builds 62k-100k. The slow end is that measurement; the fast end allows
+	// for server-class hardware.
+	MySQLCopy    = &Kind{"mysql-copy", 12_000, 120_000}    // ALGORITHM=COPY: writes are blocked for the duration
+	MySQLRebuild = &Kind{"mysql-rebuild", 35_000, 280_000} // INPLACE table rebuild: writes continue
+	MySQLIndex   = &Kind{"mysql-index", 55_000, 450_000}   // INPLACE secondary index build: writes continue
 )
 
 // Range is an approximate lock duration.
