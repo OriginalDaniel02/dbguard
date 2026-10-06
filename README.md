@@ -260,6 +260,7 @@ jobs:
 | `dsn` | — | Read-only PostgreSQL connection string. Pass it from a secret. |
 | `migrations-path` | `db/migration` | Only changed `.sql` files under this path are checked |
 | `fail-on` | `medium-high` | Lowest risk that fails the check |
+| `engine` | *(detected)* | `postgres` or `mysql`. Empty: from the connection string, else `postgres` |
 | `version` | *(empty)* | Release to install (checksum-verified). Empty builds from the action's checkout |
 
 Do not add a `paths:` filter to this workflow. The action only looks at changed migration files and does nothing otherwise, whereas a path filter skips the run entirely: a stale warning stays on the PR after the risky migration is removed, and if you mark the check as *required*, PRs that don't touch migrations would wait forever for a check that never starts.
@@ -282,7 +283,7 @@ Then add these CI/CD variables (Settings > CI/CD > Variables, masked):
 | `DBGUARD_GITLAB_TOKEN` | Project or group access token with the `api` scope and the Developer role. `CI_JOB_TOKEN` cannot post merge request comments. |
 | `DBGUARD_DSN` | *(optional)* read-only PostgreSQL connection string, for real table sizes |
 
-Optional overrides: `DBGUARD_VERSION`, `DBGUARD_MIGRATIONS_PATH` (default `db/migration`), `DBGUARD_FAIL_ON`.
+Optional overrides: `DBGUARD_VERSION`, `DBGUARD_MIGRATIONS_PATH` (default `db/migration`), `DBGUARD_FAIL_ON`, `DBGUARD_ENGINE` (`postgres` or `mysql`).
 
 The job posts **one** merge request comment, edits it in place on every push, resolves it when the risky migration is removed, and fails when there are blocking findings (make the pipeline required to block the merge). Under the hood it uses `dbguard gitlab-comment`, which you can also call yourself: `dbguard check --format markdown ... | dbguard gitlab-comment`.
 

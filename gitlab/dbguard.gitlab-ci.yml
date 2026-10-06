@@ -12,7 +12,8 @@
 #   DBGUARD_DSN           (optional) read-only PostgreSQL connection string, for real table sizes.
 #                         Without it every table is assumed large.
 #
-# Optional variables: DBGUARD_VERSION, DBGUARD_MIGRATIONS_PATH, DBGUARD_FAIL_ON.
+# Optional variables: DBGUARD_VERSION, DBGUARD_MIGRATIONS_PATH, DBGUARD_FAIL_ON, DBGUARD_ENGINE (postgres | mysql;
+# default: detected from DBGUARD_DSN, else postgres).
 dbguard:check:
   stage: test
   image: alpine:3.20
@@ -22,6 +23,7 @@ dbguard:check:
     DBGUARD_REPO: "OriginalDaniel02/dbguard"
     DBGUARD_MIGRATIONS_PATH: "db/migration"
     DBGUARD_FAIL_ON: "medium-high"
+    DBGUARD_ENGINE: ""
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   before_script:
@@ -51,7 +53,7 @@ dbguard:check:
 
       set +e
       # shellcheck disable=SC2086  # migration file names contain no spaces
-      dbguard check --format markdown --fail-on "$DBGUARD_FAIL_ON" $changed > dbguard-comment.md
+      dbguard check ${DBGUARD_ENGINE:+--engine "$DBGUARD_ENGINE"} --format markdown --fail-on "$DBGUARD_FAIL_ON" $changed > dbguard-comment.md
       code=$?
       set -e
       if [ "$code" -eq 2 ]; then cat dbguard-comment.md; exit 2; fi # usage / parse / connection error
