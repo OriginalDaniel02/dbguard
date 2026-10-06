@@ -16,7 +16,7 @@ import (
 
 // analyze checks one migration file. Plain SQL (Flyway, or Liquibase "formatted
 // SQL") goes straight to the rules; Liquibase XML/YAML/JSON changelogs are first
-// translated to the equivalent PostgreSQL. It returns findings and non-fatal problems.
+// translated to the equivalent PostgreSQL or MySQL. It returns findings and non-fatal problems.
 func analyze(path, text string, opts rules.Options, engine string) ([]rules.Finding, []string, error) {
 	if !liquibase.IsStructured(path) {
 		if liquibase.Sniff(path, []byte(head(text))) {
@@ -33,7 +33,11 @@ func analyze(path, text string, opts rules.Options, engine string) ([]rules.Find
 		return found, override.Apply(text, found), nil
 	}
 
-	cl, err := liquibase.Parse(path, []byte(text))
+	lbEngine := liquibase.EnginePostgres
+	if engine == "mysql" {
+		lbEngine = liquibase.EngineMySQL
+	}
+	cl, err := liquibase.ParseFor(path, []byte(text), lbEngine)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -48,10 +52,18 @@ func analyze(path, text string, opts rules.Options, engine string) ([]rules.Find
 	}
 	opts.Placeholders = merged
 
-	comb := cl.Combine(rules.Parses)
-	found, err := rules.Check(comb.SQL, opts)
-	if err != nil {
-		return nil, nil, err
+	var comb liquibase.Combined
+	var found []rules.Finding
+	if engine == "mysql" {
+		comb = cl.Combine(rules.MySQLParses)
+		var mysqlProblems []string
+		found, mysqlProblems = rules.CheckMySQLLenient(comb.SQL, opts)
+		comb.Problems = append(comb.Problems, mysqlProblems...)
+	} else {
+		comb = cl.Combine(rules.Parses)
+		if found, err = rules.Check(comb.SQL, opts); err != nil {
+			return nil, nil, err
+		}
 	}
 	problems := append([]string(nil), comb.Problems...)
 

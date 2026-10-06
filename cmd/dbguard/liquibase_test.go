@@ -173,3 +173,46 @@ func TestExplicitNonChangelogFilesAreSkippedNotErrors(t *testing.T) {
 		t.Fatalf("CI passes changed files explicitly; non-changelog XML/JSON must be skipped, SQL always checked: %s", got)
 	}
 }
+
+func TestLiquibaseOnMySQL(t *testing.T) {
+	t.Setenv("DBGUARD_DSN", "")
+	var o, e bytes.Buffer
+	code := check([]string{"--engine", "mysql", "--format", "json", "--rows", "orders=14000000", lqFile("mysql-changelog.xml")}, &o, &e)
+	var files []report.File
+	if err := json.Unmarshal(o.Bytes(), &files); err != nil {
+		t.Fatalf("%v\n%s\n%s", err, o.String(), e.String())
+	}
+	var got []string
+	for _, f := range files[0].Findings {
+		s := f.Rule
+		if f.Override != "" {
+			s += ":acknowledged"
+		}
+		got = append(got, s)
+	}
+	sort.Strings(got)
+	want := []string{
+		"add-column-nonconstant-default", // changeSet 3: DEFAULT (UUID()) is an expression default
+		"add-foreign-key",                // changeSet 7: foreign_key_checks=1 copies the table
+		"add-foreign-key",                // changeSet 10: addLookupTable adds a validated FK on the big table
+		"alter-column-type",              // changeSet 5: modifyDataType
+		"alter-column-type",              // changeSet 6: offline, MODIFY is assumed to change the type
+		"create-index",                   // changeSet 4 (online: low)
+		"create-index",                   // changeSet 8: unique (online: low)
+		"create-index:acknowledged",      // changeSet 12: override in the changeSet comment
+		"drop-column",                    // changeSet 8
+	}
+	// Not reported: createTable + its index (new table), ${now} -> CURRENT_TIMESTAMP default (INSTANT),
+	// ADD PRIMARY KEY on the table created in changeSet 1, the lookup table's own steps, the explicit
+	// ALGORITHM=INSTANT statement, the postgresql-only changeSet.
+	if strings.Join(got, "\n") != strings.Join(want, "\n") || code != 1 {
+		t.Fatalf("code=%d\n got  %v\n want %v\nproblems: %v", code, got, want, files[0].Problems)
+	}
+	raw, _ := os.ReadFile(lqFile("mysql-changelog.xml"))
+	lines := strings.Split(string(raw), "\n")
+	for _, f := range files[0].Findings {
+		if !strings.Contains(lines[f.Line-1], "<changeSet") {
+			t.Errorf("%s reported at line %d: %q", f.Rule, f.Line, lines[f.Line-1])
+		}
+	}
+}

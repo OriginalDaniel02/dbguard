@@ -88,7 +88,7 @@ data but no statistics is reported as unknown (assumed large), not as empty.
 
 ## Limits
 
-- Flyway SQL migrations. Liquibase for MySQL is covered separately in the Liquibase section.
+- Flyway SQL migrations and Liquibase changelogs (XML, YAML, JSON, formatted SQL). For Liquibase, `addNotNullConstraint` needs `columnDataType` and `addLookupTable` needs `newColumnDataType` on MySQL (Liquibase itself requires them); a change without them is listed as not analyzed. Liquibase's `modifyDataType` emits `MODIFY col TYPE` without `NOT NULL`, exactly as Liquibase does.
 - MariaDB is detected and warned about: its online DDL differs from MySQL 8.
 - A statement the MySQL parser cannot read is listed as "not analyzed" instead of failing the file. The mysql
   client's `DELIMITER` directive (stored procedures, triggers) is not supported.

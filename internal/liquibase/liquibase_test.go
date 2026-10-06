@@ -158,7 +158,7 @@ func TestDbmsAttribute(t *testing.T) {
 		"": true, "all": true, "postgresql": true, "PostgreSQL": true, "oracle,postgresql": true,
 		"oracle": false, "mysql,oracle": false, "!oracle": true, "!postgresql": false, "!oracle,!mysql": true,
 	} {
-		if got := dbmsMatches(attr); got != want {
+		if got := dbmsMatches(attr, EnginePostgres); got != want {
 			t.Errorf("dbms=%q: got %v, want %v", attr, got, want)
 		}
 	}
@@ -179,5 +179,73 @@ func TestSniffAndRejectNonChangelogs(t *testing.T) {
 	}
 	if _, err := Parse("a.txt", nil); err == nil {
 		t.Error("unknown extension")
+	}
+}
+
+func loadFor(t *testing.T, name, engine string) *Changelog {
+	t.Helper()
+	p := filepath.Join("..", "..", "testdata", "liquibase", name)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := ParseFor(p, b, engine)
+	if err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+	return c
+}
+
+// Expected forms are what Liquibase 4.29 itself generates for MySQL (offline update-sql).
+func TestMySQLTranslationMatchesRealLiquibase(t *testing.T) {
+	c := loadFor(t, "mysql-changelog.xml", EngineMySQL)
+	sql := c.Combine(nil).SQL
+	for _, want := range []string{
+		"CREATE TABLE `widgets` (`id` bigint, `name` varchar(40));",
+		"CREATE INDEX `idx_widgets_name` ON `widgets` (`name`);",
+		// multi-column addColumn is ONE statement (MySQL chooses one algorithm for it)
+		"ALTER TABLE `orders` ADD COLUMN `note` varchar(10), ADD COLUMN `qty` int DEFAULT 0, ADD COLUMN `created_at` datetime DEFAULT ${now};",
+		"ALTER TABLE `orders` ADD COLUMN `token` varchar(36) DEFAULT (UUID());",
+		"ALTER TABLE `orders` MODIFY `total` bigint;",
+		"ALTER TABLE `orders` MODIFY `ref` varchar(30) NOT NULL;",
+		"ALTER TABLE `orders` ADD CONSTRAINT `fk_orders_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`);",
+		"ALTER TABLE `orders` ADD CONSTRAINT `uq_orders_ref` UNIQUE (`ref`);",
+		"ALTER TABLE `widgets` ADD PRIMARY KEY (`id`);", // MySQL ignores the primary key's name
+		"ALTER TABLE `orders` DROP COLUMN `legacy`;",
+		"ALTER TABLE orders ADD COLUMN flag TINYINT, ALGORITHM=INSTANT;",
+		"CREATE TABLE `kinds` AS SELECT DISTINCT `kind` AS `kind` FROM `orders` WHERE `kind` IS NOT NULL;",
+		"ALTER TABLE `kinds` MODIFY `kind` varchar(20) NOT NULL;",
+		"ALTER TABLE `orders` ADD CONSTRAINT `FK_ORDERS_KINDS` FOREIGN KEY (`kind`) REFERENCES `kinds` (`kind`);",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("missing %q in:\n%s", want, sql)
+		}
+	}
+	if strings.Contains(sql, "pg_only") {
+		t.Error("a postgresql-only changeSet must be skipped when targeting MySQL")
+	}
+	if strings.Contains(sql, `"`) {
+		t.Errorf("MySQL identifiers must use backticks, not double quotes:\n%s", sql)
+	}
+	if c.Properties["now"] != "CURRENT_TIMESTAMP" {
+		t.Errorf("the mysql property must win: %q", c.Properties["now"])
+	}
+}
+
+func TestPostgresChangelogSkipsMySQLOnlyChangesets(t *testing.T) {
+	xml := `<databaseChangeLog><changeSet id="1" author="a" dbms="mysql"><createIndex tableName="t" indexName="i"><column name="a"/></createIndex></changeSet>
+<changeSet id="2" author="a"><createIndex tableName="t" indexName="j"><column name="a"/></createIndex></changeSet></databaseChangeLog>`
+	pg, _ := ParseFor("c.xml", []byte(xml), EnginePostgres)
+	my, _ := ParseFor("c.xml", []byte(xml), EngineMySQL)
+	if len(pg.Changesets) != 1 || pg.Changesets[0].ID != "2" || len(my.Changesets) != 2 {
+		t.Fatalf("pg=%d my=%d", len(pg.Changesets), len(my.Changesets))
+	}
+}
+
+func TestMySQLNeedsTypeForNotNullAndLookup(t *testing.T) {
+	xml := `<databaseChangeLog><changeSet id="1" author="a"><addNotNullConstraint tableName="t" columnName="c"/></changeSet></databaseChangeLog>`
+	c, _ := ParseFor("c.xml", []byte(xml), EngineMySQL)
+	if p := c.Combine(nil).Problems; len(p) != 1 || !strings.Contains(p[0], "columnDataType") {
+		t.Fatalf("a MySQL addNotNullConstraint without columnDataType cannot be translated: %v", p)
 	}
 }

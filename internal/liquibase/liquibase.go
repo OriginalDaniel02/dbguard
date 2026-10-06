@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// Engine is the dbms name Liquibase uses for PostgreSQL in `dbms=` attributes.
-const Engine = "postgresql"
-
 // Changeset is one <changeSet>, translated.
 type Changeset struct {
 	ID, Author string
@@ -27,9 +24,51 @@ type Changelog struct {
 	Properties map[string]string // <property> values, usable as ${name}
 }
 
-// Parse reads a changelog. The format is chosen by file extension (.xml, .yaml,
-// .yml, .json); path is also used to resolve relative sqlFile references.
+// Engines, as Liquibase names them in `dbms=` attributes.
+const (
+	EnginePostgres = "postgresql"
+	EngineMySQL    = "mysql"
+)
+
+// dialect carries the engine-specific parts of translation.
+type dialect struct{ engine string }
+
+// q quotes an identifier for the engine.
+func (d dialect) q(s string) string {
+	s = strings.TrimSpace(s)
+	if d.engine == EngineMySQL {
+		return "`" + strings.ReplaceAll(s, "`", "``") + "`"
+	}
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+func (d dialect) tableRef(schema, table string) string {
+	if strings.TrimSpace(schema) != "" {
+		return d.q(schema) + "." + d.q(table)
+	}
+	return d.q(table)
+}
+
+func (d dialect) colList(s string) string {
+	var parts []string
+	for _, c := range strings.Split(s, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			parts = append(parts, d.q(c))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// Parse reads a changelog for PostgreSQL. See ParseFor.
 func Parse(path string, data []byte) (*Changelog, error) {
+	return ParseFor(path, data, EnginePostgres)
+}
+
+// ParseFor reads a changelog and translates it for the engine (EnginePostgres or
+// EngineMySQL). The format is chosen by file extension (.xml, .yaml, .yml, .json);
+// path is also used to resolve relative sqlFile references.
+func ParseFor(path string, data []byte, engine string) (*Changelog, error) {
+	d := dialect{engine: engine}
 	var root *node
 	var err error
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -46,7 +85,7 @@ func Parse(path string, data []byte) (*Changelog, error) {
 
 	c := &Changelog{Properties: map[string]string{}}
 	for _, k := range root.kids {
-		if k.name == "property" && dbmsMatches(k.attr("dbms")) {
+		if k.name == "property" && dbmsMatches(k.attr("dbms"), engine) {
 			if name := k.attr("name"); name != "" {
 				if _, set := c.Properties[name]; !set { // Liquibase: first definition wins
 					c.Properties[name] = k.attr("value")
@@ -55,10 +94,10 @@ func Parse(path string, data []byte) (*Changelog, error) {
 		}
 	}
 	for _, k := range root.kids {
-		if k.name != "changeSet" || !dbmsMatches(k.attr("dbms")) {
+		if k.name != "changeSet" || !dbmsMatches(k.attr("dbms"), engine) {
 			continue
 		}
-		c.Changesets = append(c.Changesets, translateChangeset(k, filepath.Dir(path)))
+		c.Changesets = append(c.Changesets, translateChangeset(k, filepath.Dir(path), d))
 	}
 	return c, nil
 }
@@ -157,7 +196,7 @@ func label(cs Changeset) string {
 // dbmsMatches implements Liquibase's dbms attribute for PostgreSQL: empty or
 // "all" matches; a list matches if it names postgresql; "!postgresql" excludes it;
 // a list of only other exclusions ("!oracle") still matches.
-func dbmsMatches(attr string) bool {
+func dbmsMatches(attr, engine string) bool {
 	attr = strings.TrimSpace(strings.ToLower(attr))
 	if attr == "" || attr == "all" {
 		return true
@@ -168,37 +207,17 @@ func dbmsMatches(attr string) bool {
 		switch {
 		case d == "":
 		case strings.HasPrefix(d, "!"):
-			if d[1:] == Engine {
+			if d[1:] == engine {
 				return false
 			}
 		default:
 			positive = true
-			if d == Engine || d == "all" {
+			if d == engine || d == "all" {
 				included = true
 			}
 		}
 	}
 	return !positive || included
-}
-
-// q quotes an identifier.
-func q(s string) string { return `"` + strings.ReplaceAll(strings.TrimSpace(s), `"`, `""`) + `"` }
-
-func tableRef(schema, table string) string {
-	if strings.TrimSpace(schema) != "" {
-		return q(schema) + "." + q(table)
-	}
-	return q(table)
-}
-
-func colList(s string) string {
-	var parts []string
-	for _, c := range strings.Split(s, ",") {
-		if c = strings.TrimSpace(c); c != "" {
-			parts = append(parts, q(c))
-		}
-	}
-	return strings.Join(parts, ", ")
 }
 
 func isTrue(s string) bool { return strings.EqualFold(strings.TrimSpace(s), "true") }

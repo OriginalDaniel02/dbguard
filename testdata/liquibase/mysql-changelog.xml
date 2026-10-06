@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <property name="now" value="CURRENT_TIMESTAMP" dbms="mysql"/>
+  <property name="now" value="now()" dbms="postgresql"/>
+
+  <changeSet id="1" author="dev">
+    <createTable tableName="widgets">
+      <column name="id" type="bigint"/>
+      <column name="name" type="varchar(40)"/>
+    </createTable>
+    <createIndex tableName="widgets" indexName="idx_widgets_name">
+      <column name="name"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="2" author="dev">
+    <addColumn tableName="orders">
+      <column name="note" type="varchar(10)"/>
+      <column name="qty" type="int" defaultValueNumeric="0"/>
+      <column name="created_at" type="datetime" defaultValueComputed="${now}"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="3" author="dev">
+    <addColumn tableName="orders">
+      <column name="token" type="varchar(36)" defaultValueComputed="(UUID())"/>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="4" author="dev">
+    <createIndex tableName="orders" indexName="idx_orders_customer">
+      <column name="customer_id"/>
+    </createIndex>
+  </changeSet>
+
+  <changeSet id="5" author="dev">
+    <modifyDataType tableName="orders" columnName="total" newDataType="bigint"/>
+  </changeSet>
+
+  <changeSet id="6" author="dev">
+    <addNotNullConstraint tableName="orders" columnName="ref" columnDataType="varchar(30)"/>
+  </changeSet>
+
+  <changeSet id="7" author="dev">
+    <addForeignKeyConstraint baseTableName="orders" baseColumnNames="customer_id"
+        referencedTableName="customers" referencedColumnNames="id" constraintName="fk_orders_customer"/>
+  </changeSet>
+
+  <changeSet id="8" author="dev">
+    <addUniqueConstraint tableName="orders" columnNames="ref" constraintName="uq_orders_ref"/>
+    <addPrimaryKey tableName="widgets" columnNames="id" constraintName="pk_widgets"/>
+    <dropColumn tableName="orders" columnName="legacy"/>
+  </changeSet>
+
+  <changeSet id="9" author="dev">
+    <sql>ALTER TABLE orders ADD COLUMN flag TINYINT, ALGORITHM=INSTANT</sql>
+  </changeSet>
+
+  <changeSet id="10" author="dev">
+    <addLookupTable existingTableName="orders" existingColumnName="kind" newTableName="kinds" newColumnName="kind" newColumnDataType="varchar(20)"/>
+  </changeSet>
+
+  <changeSet id="11" author="dev" dbms="postgresql">
+    <createIndex tableName="orders" indexName="pg_only"><column name="ref"/></createIndex>
+  </changeSet>
+
+  <changeSet id="12" author="dev">
+    <comment>dbguard:ignore create-index reason: nightly maintenance window</comment>
+    <createIndex tableName="orders" indexName="idx_orders_ref"><column name="ref"/></createIndex>
+  </changeSet>
+</databaseChangeLog>
