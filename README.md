@@ -160,7 +160,7 @@ Get the warning while you write the migration, not in the PR. The extension unde
 acknowledges a risk with an auditable `dbguard:ignore ... reason:` comment. It wraps the same `dbguard` binary your CI uses, so
 the editor and the pipeline always agree.
 
-Install the `.vsix` from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases) (the extension needs `dbguard` 0.3.0 or newer on your `PATH`):
+Install the `.vsix` from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases) (the extension needs `dbguard` 0.4.0 or newer on your `PATH`):
 
 ```bash
 code --install-extension dbguard-0.4.0.vsix

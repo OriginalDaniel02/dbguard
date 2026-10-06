@@ -83,3 +83,19 @@ public boolean canExecuteInTransaction() { return false; }
 - Spring `JdbcTemplate`, plain JDBC and `Statement.execute` all work, because only the string literals matter. SQL built through a
   query-builder DSL does not.
 - Kotlin and Scala migrations are not read.
+
+## CI paths
+
+Java migrations normally live under `src/main/java/db/migration`, not `db/migration`. Point CI at the folder that holds yours:
+
+```yaml
+# GitHub Action
+- uses: OriginalDaniel02/dbguard/action@v0.4.0
+  with:
+    migrations-path: src/main/java/db/migration
+```
+
+```yaml
+# GitLab: set the CI/CD variable
+DBGUARD_MIGRATIONS_PATH: src/main/java/db/migration
+```
