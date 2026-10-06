@@ -89,8 +89,32 @@ func Markdown(w io.Writer, files []File, failOn rules.Risk) {
 	fmt.Fprint(w, "\n", body.String())
 }
 
-func JSON(w io.Writer, files []File) error {
+// jsonFinding is a finding as written in JSON: the engine's finding plus whether it
+// would fail the check at the configured threshold.
+type jsonFinding struct {
+	rules.Finding
+	Blocking bool `json:"blocking"`
+}
+
+type jsonFile struct {
+	Path     string        `json:"path"`
+	Findings []jsonFinding `json:"findings"`
+	Problems []string      `json:"problems"`
+}
+
+// JSON writes the report as a stable, documented structure (see docs/json.md): an array
+// of files, each with its findings and problems. Empty lists are [], never null.
+func JSON(w io.Writer, files []File, failOn rules.Risk) error {
+	out := make([]jsonFile, 0, len(files))
+	for _, f := range files {
+		jf := jsonFile{Path: f.Path, Findings: []jsonFinding{}, Problems: []string{}}
+		for _, x := range f.Findings {
+			jf.Findings = append(jf.Findings, jsonFinding{Finding: x, Blocking: Blocking(x, failOn)})
+		}
+		jf.Problems = append(jf.Problems, f.Problems...)
+		out = append(out, jf)
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(files)
+	return enc.Encode(out)
 }

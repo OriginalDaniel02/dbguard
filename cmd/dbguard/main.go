@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -19,9 +20,11 @@ import (
 const usage = `usage: dbguard <command> [flags]
 
 commands:
+  version   print the version
   check     check Flyway or Liquibase migrations for risky locking operations
   snapshot  capture a read-only schema snapshot as JSON
   drift     compare live environments with the expected schema
+  changelog per-table schema change history, built from saved snapshots
   gitlab-comment  post/update the DB Guard comment on a GitLab merge request
 
 usage of check: dbguard check [flags] <migration-file-or-dir>...
@@ -29,15 +32,33 @@ Exit codes: 0 = no blocking findings, 1 = blocking findings, 2 = error.
 
 flags of check:`
 
+// version is set at release time: -ldflags "-X main.version=v0.3.0".
+var version = "dev"
+
+func versionString() string {
+	if version != "dev" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	return "dev"
+}
+
 func main() {
 	if len(os.Args) >= 2 {
 		switch os.Args[1] {
+		case "version", "--version", "-version":
+			fmt.Println("dbguard", versionString())
+			os.Exit(0)
 		case "check":
 			os.Exit(check(os.Args[2:], os.Stdout, os.Stderr))
 		case "snapshot":
 			os.Exit(snapshotCmd(os.Args[2:], os.Stdout, os.Stderr))
 		case "drift":
 			os.Exit(driftCmd(os.Args[2:], os.Stdout, os.Stderr))
+		case "changelog":
+			os.Exit(changelogCmd(os.Args[2:], os.Stdout, os.Stderr))
 		case "gitlab-comment":
 			os.Exit(gitlabCommentCmd(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
@@ -206,7 +227,7 @@ func check(args []string, stdout, stderr io.Writer) int {
 	case "markdown":
 		report.Markdown(stdout, out, threshold)
 	case "json":
-		if err := report.JSON(stdout, out); err != nil {
+		if err := report.JSON(stdout, out, threshold); err != nil {
 			fmt.Fprintln(stderr, "dbguard:", err)
 			return 2
 		}

@@ -94,7 +94,7 @@ func TestFormats(t *testing.T) {
 		t.Errorf("markdown must start with the marker: %q", md)
 	}
 	_, js, _ := run(t, "--format", "json", "--rows", "big=14000000", f)
-	if !strings.Contains(js, `"Rule": "create-index"`) {
+	if !strings.Contains(js, `"rule": "create-index"`) {
 		t.Errorf("json: %s", js)
 	}
 	if code, _, _ := run(t, "--format", "xml", f); code != 2 {

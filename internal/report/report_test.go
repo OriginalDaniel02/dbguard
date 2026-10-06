@@ -2,6 +2,7 @@ package report
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -68,7 +69,66 @@ func TestTextAndJSON(t *testing.T) {
 		t.Fatalf("text: %s", b.String())
 	}
 	b.Reset()
-	if err := JSON(&b, sample()); err != nil || !strings.Contains(b.String(), "create-index") {
+	if err := JSON(&b, sample(), rules.MediumHigh); err != nil || !strings.Contains(b.String(), "create-index") {
 		t.Fatalf("json: %v %s", err, b.String())
+	}
+}
+
+// The JSON is a public contract (the VS Code extension and CI scripts read it): lock it down.
+func TestJSONContract(t *testing.T) {
+	var b bytes.Buffer
+	if err := JSON(&b, sample(), rules.MediumHigh); err != nil {
+		t.Fatal(err)
+	}
+	var files []map[string]any
+	if err := json.Unmarshal(b.Bytes(), &files); err != nil {
+		t.Fatal(err)
+	}
+	f := files[0]
+	if f["path"] != "db/migration/V2__x.sql" || len(f["problems"].([]any)) != 1 {
+		t.Fatalf("file: %v", f)
+	}
+	first := f["findings"].([]any)[0].(map[string]any)
+	for _, key := range []string{"rule", "risk", "table", "rows", "line", "statement", "lock", "message", "alternative", "estimate", "blocking"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("missing key %q in %v", key, first)
+		}
+	}
+	if first["risk"] != "high" || first["blocking"] != true || first["rule"] != "create-index" || first["line"] != float64(4) {
+		t.Errorf("values: %v", first)
+	}
+	est := first["estimate"].(map[string]any)
+	if est["text"] == "" || est["min_seconds"].(float64) <= 0 || est["max_seconds"].(float64) < est["min_seconds"].(float64) {
+		t.Errorf("estimate: %v", est)
+	}
+	second := f["findings"].([]any)[1].(map[string]any)
+	if second["blocking"] != false || second["override"] != "write-quiet table" {
+		t.Errorf("an acknowledged finding never blocks: %v", second)
+	}
+	if _, ok := second["estimate"]; ok {
+		t.Error("estimate is omitted when there is none")
+	}
+	// Keys must not leak Go field names.
+	if strings.Contains(b.String(), `"Rule"`) || strings.Contains(b.String(), `"Risk"`) {
+		t.Error("JSON must use the documented lowercase names")
+	}
+	// Empty lists are [] and never null.
+	b.Reset()
+	JSON(&b, []File{{Path: "a.sql"}}, rules.High)
+	if !strings.Contains(b.String(), `"findings": []`) || !strings.Contains(b.String(), `"problems": []`) {
+		t.Errorf("empty lists must be []: %s", b.String())
+	}
+}
+
+func TestFindingRoundTripsThroughJSON(t *testing.T) {
+	var b bytes.Buffer
+	JSON(&b, sample(), rules.MediumHigh)
+	var back []File
+	if err := json.Unmarshal(b.Bytes(), &back); err != nil {
+		t.Fatal(err)
+	}
+	g := back[0].Findings[0]
+	if g.Risk != rules.High || g.Estimate == nil || g.Estimate.Max <= g.Estimate.Min || g.Rule != rules.CreateIndex {
+		t.Fatalf("round trip lost data: %+v", g)
 	}
 }

@@ -37,6 +37,19 @@ func (r Risk) String() string {
 	return "unknown"
 }
 
+// MarshalText makes Risk appear as a word ("high") in JSON, not a number.
+func (r Risk) MarshalText() ([]byte, error) { return []byte(r.String()), nil }
+
+// UnmarshalText reads the word form back.
+func (r *Risk) UnmarshalText(b []byte) error {
+	v, err := ParseRisk(string(b))
+	if err != nil {
+		return err
+	}
+	*r = v
+	return nil
+}
+
 // ParseRisk converts a flag value to a Risk.
 func ParseRisk(s string) (Risk, error) {
 	for r := Safe; r <= High; r++ {
@@ -67,17 +80,17 @@ const (
 
 // Finding is one rule hit on one statement.
 type Finding struct {
-	Rule        string
-	Risk        Risk
-	Table       string
-	Rows        int64 // -1 when unknown
-	Line        int
-	Statement   string
-	Lock        string
-	Message     string
-	Alternative string
-	Estimate    *estimate.Range // nil when no estimate applies
-	Override    string          // non-empty reason when acknowledged
+	Rule        string          `json:"rule"`
+	Risk        Risk            `json:"risk"` // safe | low | medium | medium-high | high
+	Table       string          `json:"table"`
+	Rows        int64           `json:"rows"` // estimated row count; -1 when unknown
+	Line        int             `json:"line"` // 1-based line of the statement (or Liquibase changeSet)
+	Statement   string          `json:"statement"`
+	Lock        string          `json:"lock"`
+	Message     string          `json:"message"`
+	Alternative string          `json:"alternative"`
+	Estimate    *estimate.Range `json:"estimate,omitempty"` // nil when no estimate applies
+	Override    string          `json:"override,omitempty"` // non-empty reason when acknowledged
 }
 
 // Stats supplies table sizes. Implementations must be read-only.

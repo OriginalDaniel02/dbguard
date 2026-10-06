@@ -5,6 +5,7 @@
 package estimate
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"time"
@@ -40,6 +41,28 @@ var (
 
 // Range is an approximate lock duration.
 type Range struct{ Min, Max time.Duration }
+
+// MarshalJSON gives machines the numbers and humans the text.
+func (r Range) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		MinSeconds float64 `json:"min_seconds"`
+		MaxSeconds float64 `json:"max_seconds"`
+		Text       string  `json:"text"`
+	}{r.Min.Seconds(), r.Max.Seconds(), r.String()})
+}
+
+// UnmarshalJSON reads the form MarshalJSON writes.
+func (r *Range) UnmarshalJSON(b []byte) error {
+	var v struct {
+		MinSeconds float64 `json:"min_seconds"`
+		MaxSeconds float64 `json:"max_seconds"`
+	}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	r.Min, r.Max = secs(v.MinSeconds), secs(v.MaxSeconds)
+	return nil
+}
 
 // For estimates the duration of kind k over rows rows.
 func For(k *Kind, rows int64) Range {

@@ -132,6 +132,27 @@ production: 2 difference(s)
 
 It runs as a scheduled job (a ready-made GitHub Actions workflow is in [`examples/drift-check.yml`](examples/drift-check.yml)), is read-only, supports ignore patterns for intentional differences, and posts to Slack when it finds drift. See [docs/drift.md](docs/drift.md).
 
+## Schema changelog: when did that column change?
+
+Every `drift --save-dir` run keeps a snapshot. `dbguard changelog` diffs consecutive snapshots of each environment and
+makes the history searchable per table:
+
+```bash
+dbguard changelog --dir snapshots --table orders --object status --kind column-type-changed
+```
+
+```text
+public.orders
+  2026-10-03 06:00 UTC  production   column status type changed: text -> varchar(20)
+      detected between 2026-10-02 06:00 and 2026-10-03 06:00 UTC
+```
+
+Filters: `--env`, `--table` / `--object` (names or globs), `--kind`, `--action added|dropped|changed`,
+`--search TEXT`, `--since` / `--until` (a date, an RFC 3339 time, or an age such as `30d`), `--limit`, and the same
+`--ignore` patterns as `drift`. Output is `text`, `markdown` or `json`. The exact moment of a change is unknown, so each
+entry shows the window between the two snapshots that bracket it; snapshot more often to narrow it. See
+[docs/drift.md](docs/drift.md).
+
 ## Installation
 
 ### Prebuilt binary
@@ -342,7 +363,7 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | | GitLab CI | Implemented |
 | | Liquibase | Implemented |
 | | MySQL (`check`) | Implemented |
-| **3** | VS Code extension for inline feedback, per-table schema changelog | Planned |
+| **3** | VS Code extension for inline feedback, per-table schema changelog | Changelog implemented; VS Code extension in progress |
 
 Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
 
@@ -364,7 +385,7 @@ DBGUARD_TEST_DSN='postgres://postgres:secret@localhost:55432/postgres?sslmode=di
 ### Project layout
 
 ```text
-cmd/dbguard        CLI entry point (check, snapshot, drift, gitlab-comment)
+cmd/dbguard        CLI entry point (check, snapshot, drift, changelog, gitlab-comment, version)
 internal/flyway    Flyway migration discovery
 internal/liquibase Liquibase changelog parsing and translation
 internal/rules     Risk rules engine (parses SQL, produces findings)
@@ -374,12 +395,13 @@ internal/mysqldb   Read-only MySQL statistics
 internal/override  Auditable in-file overrides
 internal/snapshot  Normalized schema snapshot model (JSON)
 internal/drift     Snapshot comparison and ignore rules
+internal/changelog Per-table schema history from saved snapshots
 internal/notify    Slack alerts
 internal/report    Text / Markdown / JSON output
 action/            GitHub Action
 gitlab/            GitLab CI template
 internal/gitlab    GitLab merge request comments
-docs/              Rule reference, drift guide, acceptance criteria
+docs/              Rule reference, drift guide, MySQL, JSON contract, acceptance criteria
 examples/          Ready-to-copy workflows (scheduled drift check)
 testdata/          Sample migrations (Flyway, Liquibase XML/YAML/JSON/SQL)
 ```

@@ -101,6 +101,13 @@ production: 2 difference(s)
 
 Column *order* is deliberately ignored: it changes harmlessly after a column is dropped.
 
+## History: the per-table changelog
+
+`--save-dir DIR` keeps `DIR/<environment>/<UTC timestamp>.json` for every run. `dbguard changelog --dir DIR` turns that
+history into a searchable change log: for each pair of consecutive snapshots of an environment, what was added, dropped or
+changed. Because the changes are only known to have happened between two snapshots, each entry carries that window.
+Use the same snapshot cadence as your drift job (daily in the example workflow).
+
 ## Intentional differences are not drift
 
 Some differences are on purpose: feature-flag tables, environment-specific config tables, debug columns.
