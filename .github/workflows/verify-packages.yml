@@ -43,7 +43,11 @@ jobs:
           [ "$out" = "dbguard ${TAG}" ]
           brew test OriginalDaniel02/tap/dbguard
       - name: A real check
-        run: dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql | grep -q create-index
+        run: |
+          # dbguard exits 1 when it finds a blocking risk (that is the point), so capture the output first.
+          out=$(dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql || true)
+          echo "$out"
+          echo "$out" | grep -q create-index
 
   scoop:
     if: ${{ inputs.taps }}
@@ -68,7 +72,11 @@ jobs:
           if ($out -ne "dbguard $env:TAG") { throw "unexpected version: $out" }
       - name: A real check
         shell: bash
-        run: dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql | grep -q create-index
+        run: |
+          # dbguard exits 1 when it finds a blocking risk (that is the point), so capture the output first.
+          out=$(dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql || true)
+          echo "$out"
+          echo "$out" | grep -q create-index
 
   docker:
     runs-on: ubuntu-latest
@@ -82,4 +90,7 @@ jobs:
           echo "$out"
           [ "$out" = "dbguard ${TAG}" ]
       - name: A real check, from the image
-        run: docker run --rm -v "$PWD/testdata:/t:ro" ghcr.io/originaldaniel02/dbguard:latest check --rows transactions=14000000 /t/migrations/V2__risky.sql | grep -q create-index
+        run: |
+          out=$(docker run --rm -v "$PWD/testdata:/t:ro" ghcr.io/originaldaniel02/dbguard:latest check --rows transactions=14000000 /t/migrations/V2__risky.sql || true)
+          echo "$out"
+          echo "$out" | grep -q create-index

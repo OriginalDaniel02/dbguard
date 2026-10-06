@@ -1,0 +1,66 @@
+name: Wrong warning (false positive or false negative)
+description: DB Guard flagged a safe migration, or missed a risky one. These reports matter most.
+labels: ["accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A rule that cries wolf gets ignored, and one that misses a real lock gives false confidence, so accuracy reports are the
+        most valuable thing you can send. The more concrete the evidence, the faster it gets fixed.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options:
+        - False positive (it warned, but the migration was fine)
+        - False negative (it said nothing, but the migration locked or blocked writes)
+        - Wrong estimate (the duration was far off)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: dbguard version
+      description: Output of `dbguard version`
+      placeholder: dbguard v0.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Database
+      options: [PostgreSQL, MySQL, Other (say which)]
+    validations:
+      required: true
+  - type: input
+    id: dbversion
+    attributes:
+      label: Database server version
+      placeholder: "PostgreSQL 16.2 / MySQL 8.0.36"
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: The smallest migration that shows it
+      description: SQL, a Liquibase changeSet, or the relevant Java lines. Remove anything private.
+      render: sql
+    validations:
+      required: true
+  - type: textarea
+    id: said
+    attributes:
+      label: What DB Guard reported
+      description: Paste the output, or say it reported nothing.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: reality
+    attributes:
+      label: What actually happens in your database
+      description: |
+        The evidence: how long it took, whether writes were blocked (`pg_locks`, `SHOW PROCESSLIST`), which online-DDL algorithm
+        MySQL accepted (`ALGORITHM=INSTANT` / `INPLACE, LOCK=NONE` / `COPY`), the table size, anything you measured.
+    validations:
+      required: true

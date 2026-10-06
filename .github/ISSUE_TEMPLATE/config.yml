@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/OriginalDaniel02/dbguard/discussions
+    about: Ask how to set something up, or talk through an idea, in Discussions.
+  - name: Security vulnerability
+    url: https://github.com/OriginalDaniel02/dbguard/security/advisories/new
+    about: Report it privately. Please do not open a public issue.

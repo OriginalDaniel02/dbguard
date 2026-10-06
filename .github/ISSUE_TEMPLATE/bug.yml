@@ -1,0 +1,43 @@
+name: Bug report
+description: Something is broken: a crash, a wrong exit code, bad output, an install problem.
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: dbguard version
+      description: Output of `dbguard version`
+      placeholder: dbguard v0.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: How are you running it?
+      options: [CLI, GitHub Action, GitLab CI, Docker image, Homebrew, Scoop, VS Code extension, Other]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Ubuntu 24.04 / macOS 15 / Windows 11"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The command, and a minimal migration if relevant. Remove anything private. Never paste a connection string.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or logs
+      render: text

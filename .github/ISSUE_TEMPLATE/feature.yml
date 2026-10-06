@@ -1,0 +1,26 @@
+name: Feature request
+description: A new rule, engine, migration format or integration.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: The situation, not the solution. For a new rule, which operation locks, and how did you find out?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like DB Guard to do?
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (for a new rule)
+      description: Documentation, or what you measured on a real server. Rules here are verified against real databases.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help build or test this
