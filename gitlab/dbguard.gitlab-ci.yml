@@ -4,7 +4,7 @@
 # Usage, in your .gitlab-ci.yml:
 #
 #   include:
-#     - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.2.0/gitlab/dbguard.gitlab-ci.yml
+#     - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.3.0/gitlab/dbguard.gitlab-ci.yml
 #
 # Required CI/CD variables (Settings > CI/CD > Variables, masked):
 #   DBGUARD_GITLAB_TOKEN  project/group access token (or PAT) with the "api" scope and the Developer
@@ -19,7 +19,7 @@ dbguard:check:
   image: alpine:3.20
   variables:
     GIT_DEPTH: "0" # the merge base must be available to diff against
-    DBGUARD_VERSION: "v0.2.0"
+    DBGUARD_VERSION: "v0.3.0"
     DBGUARD_REPO: "OriginalDaniel02/dbguard"
     DBGUARD_MIGRATIONS_PATH: "db/migration"
     DBGUARD_FAIL_ON: "medium-high"

@@ -310,7 +310,7 @@ The same check runs on GitLab merge requests. Include the template in your `.git
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.2.0/gitlab/dbguard.gitlab-ci.yml
+  - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.3.0/gitlab/dbguard.gitlab-ci.yml
 ```
 
 Then add these CI/CD variables (Settings > CI/CD > Variables, masked):
