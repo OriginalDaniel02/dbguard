@@ -31,7 +31,15 @@ type View struct {
 }
 
 // QName is the schema-qualified view name.
-func (v View) QName() string { return v.Schema + "." + v.Name }
+func (v View) QName() string { return qualified(v.Schema, v.Name) }
+
+// qualified joins schema and name; MySQL objects have no schema qualifier.
+func qualified(schema, name string) string {
+	if schema == "" {
+		return name
+	}
+	return schema + "." + name
+}
 
 type Sequence struct {
 	Schema    string `json:"schema"`
@@ -44,7 +52,7 @@ type Sequence struct {
 	Cycle     bool   `json:"cycle,omitempty"`
 }
 
-func (q Sequence) QName() string { return q.Schema + "." + q.Name }
+func (q Sequence) QName() string { return qualified(q.Schema, q.Name) }
 
 // Enum labels are kept in their sort order, which is meaningful.
 type Enum struct {
@@ -53,7 +61,7 @@ type Enum struct {
 	Labels []string `json:"labels"`
 }
 
-func (e Enum) QName() string { return e.Schema + "." + e.Name }
+func (e Enum) QName() string { return qualified(e.Schema, e.Name) }
 
 type Trigger struct {
 	Name string `json:"name"`
@@ -70,7 +78,7 @@ type Table struct {
 }
 
 // QName is the schema-qualified table name.
-func (t Table) QName() string { return t.Schema + "." + t.Name }
+func (t Table) QName() string { return qualified(t.Schema, t.Name) }
 
 type Column struct {
 	Name      string `json:"name"`

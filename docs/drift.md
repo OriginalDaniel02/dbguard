@@ -20,6 +20,20 @@ DB Guard is **not** a migration runner. To know what the schema *should* be, run
 migration tool, including ones DB Guard cannot parse. Alternatively, compare environments to each other
 with `--baseline-env`.
 
+## MySQL
+
+Use a `mysql://` connection string that names the database. The same commands work; the snapshot is read from
+`information_schema`. In MySQL a schema is a database, and staging and production usually have different database
+names, so tables are recorded **without** the database name: the same schema in `shop_prod` and `shop_staging`
+compares as identical (verified against a real server). Ignore patterns therefore look like `orders` and
+`orders.debug_*`, not `shop.orders`. A snapshot records its engine, and DB Guard refuses to compare a MySQL
+environment with a PostgreSQL expected schema.
+
+```bash
+DBGUARD_DSN='mysql://readonly:...@db.internal:3306/shop' dbguard snapshot --out expected.json
+dbguard drift --expected expected.json --env staging=STAGING_DSN --env production=PROD_DSN
+```
+
 ## Commands
 
 ### `dbguard snapshot`
@@ -118,6 +132,6 @@ A daily cron flags a manual change within one run cycle.
 
 ## Limits (v0.1)
 
-- PostgreSQL only. Compared: tables, columns, indexes, constraints, triggers, views, sequences, enums. Not compared yet: functions and procedures, other custom types (composite, domain), extensions, and permissions.
+- PostgreSQL and MySQL (8.0+). On MySQL the compared objects are tables, columns (type, collation, nullability, default, auto_increment, generated), indexes, primary/unique/foreign-key/check constraints, triggers and views; sequences and enums do not exist there. For PostgreSQL the compared objects are: tables, columns, indexes, constraints, triggers, views, sequences, enums. Not compared yet: functions and procedures, other custom types (composite, domain), extensions, and permissions.
 - View definitions are compared as PostgreSQL prints them, so comparing environments on *different major versions* can show formatting-only differences. Use the same major version for the scratch database as for production.
 - The state file must be persisted between scheduled runs (the example uses `actions/cache`). Without `--state-file`, an unreconciled drift alerts on every run. An unreachable database is reported as an error (exit 2) and never counts as a resolution.

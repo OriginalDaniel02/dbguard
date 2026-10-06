@@ -321,7 +321,7 @@ Please report vulnerabilities privately through GitHub's *Security → Report a 
 
 DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 
-- **PostgreSQL and MySQL** (8.0/8.4; 5.7 approximated). MariaDB is detected and warned about: its online DDL differs. The schema drift detector is PostgreSQL only for now.
+- **PostgreSQL and MySQL** (8.0/8.4; 5.7 approximated). MariaDB is detected and warned about: its online DDL differs. The schema drift detector covers both engines.
 - **Flyway SQL and Liquibase changelogs only.** Java-based Flyway migrations and Liquibase custom change classes are not read. Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
 - **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
 - **`ALTER TABLE` / `CREATE INDEX` coverage.** The rules in the table above are what is detected today. Other statements are ignored, not validated.

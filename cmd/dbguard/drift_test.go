@@ -188,3 +188,15 @@ func TestSnapshotCommand(t *testing.T) {
 		t.Errorf("unset DSN: want 2, got %d", code)
 	}
 }
+
+func TestDriftRefusesToCompareDifferentEngines(t *testing.T) {
+	pgExpected := schemaWith(colID, colEmail) // Engine: postgres
+	my := schemaWith(colID, colEmail)
+	my.Engine = "mysql"
+	fakeDB(t, map[string]*snapshot.Schema{"dsn-my": my})
+	t.Setenv("MY_DSN", "dsn-my")
+	code, out, _ := runDrift(t, "--expected", expectedFile(t, pgExpected), "--env", "prod=MY_DSN")
+	if code != 2 || !strings.Contains(out, "cannot be compared") {
+		t.Fatalf("a MySQL environment cannot be compared with a PostgreSQL expected schema: code=%d\n%s", code, out)
+	}
+}

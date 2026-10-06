@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/OriginalDaniel02/dbguard/internal/drift"
+	"github.com/OriginalDaniel02/dbguard/internal/mysqldb"
 	"github.com/OriginalDaniel02/dbguard/internal/notify"
 	"github.com/OriginalDaniel02/dbguard/internal/pg"
 	"github.com/OriginalDaniel02/dbguard/internal/snapshot"
@@ -22,6 +23,14 @@ import (
 // takeSnapshot connects read-only and snapshots the schema. A variable so tests
 // can run the commands without a database.
 var takeSnapshot = func(ctx context.Context, dsn string) (*snapshot.Schema, error) {
+	if mysqldb.IsMySQLDSN(dsn) {
+		st, err := mysqldb.Connect(ctx, dsn)
+		if err != nil {
+			return nil, err
+		}
+		defer st.Close()
+		return st.Snapshot(ctx)
+	}
 	st, err := pg.Connect(ctx, dsn)
 	if err != nil {
 		return nil, err
@@ -185,6 +194,11 @@ flags:`)
 	drifted := false
 	for _, name := range order {
 		if name == *baseline || snaps[name] == nil {
+			continue
+		}
+		if want.Engine != "" && snaps[name].Engine != "" && want.Engine != snaps[name].Engine {
+			results[name].Error = fmt.Sprintf("this environment is %s but the expected schema is %s; they cannot be compared", snaps[name].Engine, want.Engine)
+			failed = true
 			continue
 		}
 		results[name].Differences = drift.Compare(want, snaps[name], opts)
