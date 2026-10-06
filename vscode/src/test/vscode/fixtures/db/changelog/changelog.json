@@ -1,0 +1,6 @@
+{
+  "databaseChangeLog": [
+    {"changeSet": {"id": "1", "author": "dev", "changes": [
+      {"createIndex": {"tableName": "transactions", "indexName": "idx_tx_amount", "columns": [{"column": {"name": "amount"}}]}}]}}
+  ]
+}

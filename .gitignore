@@ -8,3 +8,9 @@
 # local env
 .env
 *.local
+
+# VS Code extension
+vscode/node_modules/
+vscode/out/
+vscode/*.vsix
+vscode/.vscode-test/

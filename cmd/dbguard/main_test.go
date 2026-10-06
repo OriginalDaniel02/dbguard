@@ -101,3 +101,19 @@ func TestFormats(t *testing.T) {
 		t.Errorf("unknown format: want 2")
 	}
 }
+
+func TestPickVersion(t *testing.T) {
+	for _, c := range []struct{ stamped, info, want string }{
+		{"v0.3.0", "", "v0.3.0"}, // release build, stamped by the linker
+		{"v0.3.0", "v0.2.1-0.20261006062114-48c3ffe6e6a7", "v0.3.0"}, // the stamp wins
+		{"dev", "v0.3.1", "v0.3.1"},                                  // go install ...@v0.3.1
+		{"dev", "v0.2.1-0.20261006062114-48c3ffe6e6a7+dirty", "dev"}, // a git checkout: a pseudo-version is not a version
+		{"dev", "(devel)", "dev"},
+		{"dev", "", "dev"},
+		{"dev", "v0.3.0-rc.1", "dev"}, // a pre-release is not a clean release tag
+	} {
+		if got := pickVersion(c.stamped, c.info); got != c.want {
+			t.Errorf("pickVersion(%q, %q) = %q, want %q", c.stamped, c.info, got, c.want)
+		}
+	}
+}

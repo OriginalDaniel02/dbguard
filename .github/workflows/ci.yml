@@ -40,3 +40,36 @@ jobs:
       - run: go test ./...
       - name: Static build (no cgo)
         run: CGO_ENABLED=0 go build -o /dev/null ./cmd/dbguard
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - name: Build dbguard
+        run: go build -o "$RUNNER_TEMP/dbguard" ./cmd/dbguard
+      - name: Install and compile
+        working-directory: vscode
+        run: |
+          npm ci
+          npm run compile
+      - name: Unit tests and tests against the real dbguard binary
+        working-directory: vscode
+        env:
+          DBGUARD_BIN: ${{ runner.temp }}/dbguard
+        run: node --test out/test/core.test.js out/test/cli.test.js
+      - name: Tests inside a real VS Code
+        working-directory: vscode
+        env:
+          DBGUARD_BIN: ${{ runner.temp }}/dbguard
+        run: xvfb-run -a node out/test/vscode/runTest.js
+      - name: Package the extension
+        working-directory: vscode
+        run: npm run package

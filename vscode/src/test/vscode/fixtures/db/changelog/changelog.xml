@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog>
+  <changeSet id="1" author="dev">
+    <createIndex tableName="transactions" indexName="idx_tx_amount">
+      <column name="amount"/>
+    </createIndex>
+  </changeSet>
+</databaseChangeLog>

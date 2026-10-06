@@ -153,6 +153,22 @@ Filters: `--env`, `--table` / `--object` (names or globs), `--kind`, `--action a
 entry shows the window between the two snapshots that bracket it; snapshot more often to narrow it. See
 [docs/drift.md](docs/drift.md).
 
+## VS Code extension
+
+Get the warning while you write the migration, not in the PR. The extension underlines risky statements as you open, save
+(or type) a migration, with the table size, the estimated lock time and the safer alternative, and offers a quick fix that
+acknowledges a risk with an auditable `dbguard:ignore ... reason:` comment. It wraps the same `dbguard` binary your CI uses, so
+the editor and the pipeline always agree.
+
+Install the `.vsix` from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases) (the extension needs `dbguard` 0.3.0 or newer on your `PATH`):
+
+```bash
+code --install-extension dbguard-0.3.0.vsix
+```
+
+It checks Flyway-named files and the usual migration folders, for PostgreSQL and MySQL, Flyway and Liquibase. Settings, commands
+and troubleshooting: [vscode/README.md](vscode/README.md). The extension is tested inside a real VS Code in CI.
+
 ## Installation
 
 ### Prebuilt binary
@@ -363,7 +379,7 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | | GitLab CI | Implemented |
 | | Liquibase | Implemented |
 | | MySQL (`check`) | Implemented |
-| **3** | VS Code extension for inline feedback, per-table schema changelog | Changelog implemented; VS Code extension in progress |
+| **3** | VS Code extension for inline feedback, per-table schema changelog | Implemented |
 
 Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
 
@@ -391,7 +407,8 @@ internal/liquibase Liquibase changelog parsing and translation
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
 internal/pg        Read-only PostgreSQL statistics and schema snapshots
-internal/mysqldb   Read-only MySQL statistics
+internal/mysqldb   Read-only MySQL statistics and schema snapshots
+internal/pgquery   PostgreSQL parser (WebAssembly; modified copy of wasilibs/go-pgquery)
 internal/override  Auditable in-file overrides
 internal/snapshot  Normalized schema snapshot model (JSON)
 internal/drift     Snapshot comparison and ignore rules
@@ -399,6 +416,7 @@ internal/changelog Per-table schema history from saved snapshots
 internal/notify    Slack alerts
 internal/report    Text / Markdown / JSON output
 action/            GitHub Action
+vscode/            VS Code extension (TypeScript)
 gitlab/            GitLab CI template
 internal/gitlab    GitLab merge request comments
 docs/              Rule reference, drift guide, MySQL, JSON contract, acceptance criteria
@@ -412,4 +430,4 @@ Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Se
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+Licensed under the [Apache License, Version 2.0](LICENSE). Bundled third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -35,14 +36,28 @@ flags of check:`
 // version is set at release time: -ldflags "-X main.version=v0.3.0".
 var version = "dev"
 
-func versionString() string {
-	if version != "dev" {
-		return version
+var cleanTag = regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
+
+// pickVersion decides what to report. A release build is stamped with its tag by the linker.
+// `go install ...@v0.3.0` records the same clean tag in the build info. Anything else, such
+// as a build from a git checkout, carries a Go pseudo-version like v0.2.1-0.2026...+dirty that
+// says nothing useful (and compares as older than the release it was built after): "dev".
+func pickVersion(stamped, buildInfo string) string {
+	if stamped != "dev" {
+		return stamped
 	}
-	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
-		return bi.Main.Version
+	if cleanTag.MatchString(buildInfo) {
+		return buildInfo
 	}
 	return "dev"
+}
+
+func versionString() string {
+	info := ""
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		info = bi.Main.Version
+	}
+	return pickVersion(version, info)
 }
 
 func main() {

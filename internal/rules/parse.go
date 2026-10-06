@@ -1,8 +1,8 @@
 package rules
 
 import (
+	pgquery "github.com/OriginalDaniel02/dbguard/internal/pgquery"
 	pg_query "github.com/pganalyze/pg_query_go/v6"
-	pgquery "github.com/wasilibs/go-pgquery"
 )
 
 // pgParse uses the WASM build of libpg_query, so no cgo/C toolchain is needed.

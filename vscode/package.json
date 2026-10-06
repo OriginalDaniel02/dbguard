@@ -1,0 +1,168 @@
+{
+  "name": "dbguard",
+  "displayName": "DB Guard",
+  "description": "Warns inline when a database migration will lock production: sizes, estimated lock time and the safer alternative, for Flyway and Liquibase on PostgreSQL and MySQL.",
+  "version": "0.3.0",
+  "publisher": "OriginalDaniel02",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OriginalDaniel02/dbguard.git",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "database",
+    "migration",
+    "flyway",
+    "liquibase",
+    "postgresql",
+    "mysql",
+    "schema"
+  ],
+  "activationEvents": [
+    "onLanguage:sql",
+    "onLanguage:xml",
+    "onLanguage:yaml",
+    "onLanguage:json"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dbguard.checkFile",
+        "title": "DB Guard: Check this migration"
+      },
+      {
+        "command": "dbguard.acknowledge",
+        "title": "DB Guard: Acknowledge this risk (add dbguard:ignore comment)"
+      },
+      {
+        "command": "dbguard.showChangelog",
+        "title": "DB Guard: Show schema changelog for a table"
+      },
+      {
+        "command": "dbguard.showOutput",
+        "title": "DB Guard: Show output"
+      }
+    ],
+    "configuration": {
+      "title": "DB Guard",
+      "properties": {
+        "dbguard.path": {
+          "type": "string",
+          "default": "dbguard",
+          "markdownDescription": "Path to the `dbguard` binary (version 0.3.0 or newer). Download it from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases)."
+        },
+        "dbguard.engine": {
+          "type": "string",
+          "enum": [
+            "",
+            "postgres",
+            "mysql"
+          ],
+          "default": "",
+          "markdownDescription": "Database engine. Empty: detected from the connection string in `#dbguard.dsnEnv#`, else PostgreSQL."
+        },
+        "dbguard.dsnEnv": {
+          "type": "string",
+          "default": "DBGUARD_DSN",
+          "markdownDescription": "Name of the environment variable holding a **read-only** connection string. With it, DB Guard uses real table sizes. VS Code must be started with that variable set."
+        },
+        "dbguard.tableRows": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "markdownDescription": "Table sizes to assume when there is no connection string, for example `{ \"transactions\": 14000000 }`. Without sizes or a connection, every table is assumed large."
+        },
+        "dbguard.largeRows": {
+          "type": "integer",
+          "default": 100000,
+          "description": "Tables with fewer estimated rows are treated as low risk."
+        },
+        "dbguard.failOn": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "medium-high",
+            "high"
+          ],
+          "default": "medium-high",
+          "markdownDescription": "Lowest risk shown as an **error** (the level that would fail your CI check). Lower risks are warnings or information."
+        },
+        "dbguard.mysqlVersion": {
+          "type": "string",
+          "default": "",
+          "description": "MySQL version to assume when not connected, for example 8.0.28."
+        },
+        "dbguard.placeholders": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "markdownDescription": "Flyway / Liquibase `${placeholder}` values, for example `{ \"schema\": \"app\" }`."
+        },
+        "dbguard.checkOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check a migration when it is opened."
+        },
+        "dbguard.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check a migration when it is saved."
+        },
+        "dbguard.checkOnType": {
+          "type": "boolean",
+          "default": false,
+          "description": "Check while typing (debounced), using the unsaved text."
+        },
+        "dbguard.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/db/migration/**",
+            "**/db/migrations/**",
+            "**/migrations/**",
+            "**/changelog/**",
+            "**/changelogs/**"
+          ],
+          "markdownDescription": "Glob patterns of migration files to check automatically. Flyway-named files (`V1__name.sql`) are always included. Use the **Check this migration** command on any other file."
+        },
+        "dbguard.snapshotsDir": {
+          "type": "string",
+          "default": "snapshots",
+          "markdownDescription": "Directory of schema snapshots written by `dbguard drift --save-dir`, used by **Show schema changelog**. Relative paths are resolved against the workspace folder."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/test/core.test.js out/test/cli.test.js",
+    "test:vscode": "npm run compile && node out/test/vscode/runTest.js",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "mocha": "^11.0.1",
+    "typescript": "^5.7.0"
+  }
+}

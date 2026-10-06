@@ -21,6 +21,19 @@ jobs:
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/dbguard_${os}_${arch}${ext}" ./cmd/dbguard
           done
           (cd dist && sha256sum * > checksums.txt)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+      - name: Package the VS Code extension
+        working-directory: vscode
+        run: |
+          npm ci
+          npm pkg set version="${GITHUB_REF_NAME#v}"
+          npm run package
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*
+            vscode/*.vsix
