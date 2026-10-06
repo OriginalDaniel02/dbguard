@@ -8,7 +8,7 @@ Two tools in one binary. A **pre-flight checker** reads your Flyway or Liquibase
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml/badge.svg)](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml)
-![Status](https://img.shields.io/badge/status-v0.1%20pre--release-orange)
+![Status](https://img.shields.io/badge/release-v0.3-blue)
 ![Go](https://img.shields.io/badge/built%20with-Go-00ADD8)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12%2B-336791)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0%2B-4479A1)
@@ -285,9 +285,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: OriginalDaniel02/dbguard/action@v0.1.0
+      - uses: OriginalDaniel02/dbguard/action@v0.3.0
         with:
-          version: v0.1.0
+          version: v0.3.0
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
           migrations-path: db/migration
 ```
@@ -359,12 +359,12 @@ Please report vulnerabilities privately through GitHub's *Security → Report a 
 
 ## Current scope and limitations
 
-DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
+DB Guard is at **v0.3**. Being clear about what it does not do yet:
 
 - **PostgreSQL and MySQL** (8.0/8.4; 5.7 approximated). MariaDB is detected and warned about: its online DDL differs. The schema drift detector covers both engines.
 - **Flyway SQL and Liquibase changelogs only.** Java-based Flyway migrations and Liquibase custom change classes are not read. Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
 - **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
-- **`ALTER TABLE` / `CREATE INDEX` coverage.** The rules in the table above are what is detected today. Other statements are ignored, not validated.
+- **Rule coverage.** The risk rules are the tables in this README (PostgreSQL) and in [docs/mysql.md](docs/mysql.md). Other statements are ignored, not validated; a statement the parser cannot read is reported as "not analyzed", never skipped silently.
 - **Estimates are heuristics.** See [Duration estimates](#duration-estimates-are-ranges-not-promises).
 - **Unqualified names** use the connection's `current_schema()` (or `--schema`, else `public`); a `SET search_path` inside the migration is not followed.
 - **Estimates don't consider column type or width.** A text-column index build is slower than an integer one; the range is deliberately wide to cover both.
@@ -381,7 +381,14 @@ DB Guard is at **v0.1 (Phase 1)**. Being clear about what it does not do yet:
 | | MySQL (`check`) | Implemented |
 | **3** | VS Code extension for inline feedback, per-table schema changelog | Implemented |
 
-Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector currently covers PostgreSQL tables, columns, indexes and constraints (see [docs/drift.md](docs/drift.md) for limits).
+Schema drift detection answers a different question — *has someone changed production by hand?* — and runs as a separate scheduled job, independent of the pull-request check. The drift detector compares tables, columns, indexes, constraints, triggers, views, sequences and enums on PostgreSQL, and the equivalent objects on MySQL (see [docs/drift.md](docs/drift.md) for what is not compared yet).
+
+### What is not covered yet
+
+- Other engines (SQL Server, Oracle) and MariaDB's own online-DDL rules.
+- Drift for functions, procedures, custom types, extensions and permissions.
+- Java-based Flyway migrations and Liquibase custom change classes.
+- Publishing the VS Code extension to the Marketplace (for now it is a `.vsix` attached to each release).
 
 ## Development
 

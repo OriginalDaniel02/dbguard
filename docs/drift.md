@@ -137,7 +137,7 @@ A daily cron flags a manual change within one run cycle.
 - Snapshots contain schema structure (table and column names), which can be sensitive: treat the
   `snapshots/` artifacts like any other internal document.
 
-## Limits (v0.1)
+## Limits
 
 - PostgreSQL and MySQL (8.0+). On MySQL the compared objects are tables, columns (type, collation, nullability, default, auto_increment, generated), indexes, primary/unique/foreign-key/check constraints, triggers and views; sequences and enums do not exist there. For PostgreSQL the compared objects are: tables, columns, indexes, constraints, triggers, views, sequences, enums. Not compared yet: functions and procedures, other custom types (composite, domain), extensions, and permissions.
 - View definitions are compared as PostgreSQL prints them, so comparing environments on *different major versions* can show formatting-only differences. Use the same major version for the scratch database as for production.
