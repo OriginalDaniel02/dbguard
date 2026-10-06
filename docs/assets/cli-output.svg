@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="981" height="336" viewBox="0 0 981 336" role="img" aria-label="dbguard check output">
+<rect width="981" height="336" rx="10" fill="#0d1117"/>
+<path d="M0 10a10 10 0 0 1 10-10h961a10 10 0 0 1 10 10v26H0z" fill="#161b22"/>
+<circle cx="22" cy="18" r="6" fill="#ff5f56"/><circle cx="42" cy="18" r="6" fill="#ffbd2e"/><circle cx="62" cy="18" r="6" fill="#27c93f"/>
+<g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" xml:space="preserve">
+<text x="22" y="58" xml:space="preserve" style="white-space:pre"><tspan fill="#7ee787">$</tspan><tspan fill="#c9d1d9"> dbguard check --rows transactions=14000000 --rows accounts=14000000 db/migration</tspan></text>
+<text x="22" y="79" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">db/migration/V3__changes.sql:4: </tspan><tspan fill="#ff7b72" font-weight="bold">[HIGH]</tspan><tspan fill="#c9d1d9"> public.transactions (create-index)</tspan></text>
+<text x="22" y="100" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    this will lock public.transactions (14.0M rows) for approximately 1-6 min</tspan></text>
+<text x="22" y="121" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    </tspan><tspan fill="#7ee787" font-weight="bold">safer:</tspan><tspan fill="#c9d1d9"> CREATE INDEX CONCURRENTLY (must run outside a transaction; in Flyway set executeInTransaction=false)</tspan></text>
+<text x="22" y="142" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">db/migration/V3__changes.sql:7: </tspan><tspan fill="#7ee787" font-weight="bold">[ACKNOWLEDGED]</tspan><tspan fill="#c9d1d9"> public.transactions (add-not-null)</tspan></text>
+<text x="22" y="163" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    this will lock public.transactions (14.0M rows) for approximately 7-47s</tspan></text>
+<text x="22" y="184" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    </tspan><tspan fill="#7ee787" font-weight="bold">safer:</tspan><tspan fill="#c9d1d9"> Add a NOT VALID CHECK (col IS NOT NULL), VALIDATE it separately, then SET NOT NULL (PG 12+)</tspan></text>
+<text x="22" y="205" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    </tspan><tspan fill="#8b949e" font-weight="bold">override reason:</tspan><tspan fill="#8b949e"> column is backfilled and enforced by app since v41; table is write-quiet</tspan></text>
+<text x="22" y="226" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">db/migration/V3__changes.sql:9: </tspan><tspan fill="#ffa657" font-weight="bold">[MEDIUM-HIGH]</tspan><tspan fill="#c9d1d9"> public.transactions (add-foreign-key)</tspan></text>
+<text x="22" y="247" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    this will lock public.transactions (14.0M rows) for approximately 7-47s</tspan></text>
+<text x="22" y="268" xml:space="preserve" style="white-space:pre"><tspan fill="#c9d1d9">    </tspan><tspan fill="#7ee787" font-weight="bold">safer:</tspan><tspan fill="#c9d1d9"> Add the constraint NOT VALID, then VALIDATE CONSTRAINT in a separate step</tspan></text>
+<text x="22" y="289" xml:space="preserve" style="white-space:pre"><tspan fill="#ff7b72" font-weight="bold">dbguard: 2 blocking finding(s)</tspan></text>
+</g></svg>

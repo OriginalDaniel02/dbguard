@@ -23,12 +23,7 @@ An engineer adds an index to a table. Locally and in staging it is instant, beca
 
 Knowing which operations are safe at scale usually lives in one senior engineer's head. DB Guard puts that knowledge into your CI pipeline, where a risky migration can't slip through quietly.
 
-```text
-db/migration/V3__add_index.sql:4: [HIGH] public.transactions (create-index)
-    this will lock public.transactions (14.0M rows) for approximately 1-6 min
-    safer: CREATE INDEX CONCURRENTLY (must run outside a transaction; in Flyway set executeInTransaction=false)
-dbguard: 1 blocking finding(s)
-```
+![dbguard check output: a risky index, an acknowledged risk and a foreign key, each with the table size, the estimated lock time and the safer alternative](docs/assets/cli-output.svg)
 
 ## Features
 
@@ -171,6 +166,28 @@ and troubleshooting: [vscode/README.md](vscode/README.md). The extension is test
 
 ## Installation
 
+### Homebrew (macOS and Linux)
+
+```bash
+brew install OriginalDaniel02/tap/dbguard
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add dbguard https://github.com/OriginalDaniel02/scoop-bucket
+scoop install dbguard
+```
+
+### Docker
+
+```bash
+docker run --rm -v "$PWD:/work:ro" -w /work ghcr.io/originaldaniel02/dbguard check db/migration
+```
+
+A multi-architecture (amd64, arm64) image on `ghcr.io`. It is a good fit for CI systems without a dedicated integration (Jenkins,
+CircleCI, Bitbucket, ...): `docker run` the same command.
+
 ### Prebuilt binary
 
 Tagged releases publish static binaries (Linux, macOS, Windows; amd64 and arm64 where applicable) with a `checksums.txt` on the [Releases](https://github.com/OriginalDaniel02/dbguard/releases) page.
@@ -297,6 +314,10 @@ jobs:
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}   # optional: real table sizes
           migrations-path: db/migration
 ```
+
+What reviewers see on the pull request (a real comment posted by the Action):
+
+![The DB Guard comment on a pull request: the risky ADD CHECK, what it locks, the safer alternative and how to accept the risk](docs/assets/pr-comment.png)
 
 Pinning `@v0.5.0` installs exactly that release (checksum-verified), so there is nothing else to configure. For supply-chain safety
 you can pin a commit SHA instead; `@v0` follows the latest 0.x release. *(Before v0.5.0 the Action lived at
