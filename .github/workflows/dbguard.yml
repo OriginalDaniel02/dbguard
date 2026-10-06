@@ -15,5 +15,6 @@ jobs:
       - uses: ./action
         with:
           version: v0.2.0
+          engine: mysql
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
           migrations-path: db/migration
