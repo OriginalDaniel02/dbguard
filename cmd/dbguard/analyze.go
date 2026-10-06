@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/OriginalDaniel02/dbguard/internal/flyway"
+	"github.com/OriginalDaniel02/dbguard/internal/javamig"
 	"github.com/OriginalDaniel02/dbguard/internal/liquibase"
 	"github.com/OriginalDaniel02/dbguard/internal/override"
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
@@ -16,8 +17,12 @@ import (
 
 // analyze checks one migration file. Plain SQL (Flyway, or Liquibase "formatted
 // SQL") goes straight to the rules; Liquibase XML/YAML/JSON changelogs are first
-// translated to the equivalent PostgreSQL or MySQL. It returns findings and non-fatal problems.
+// translated to the equivalent PostgreSQL or MySQL; Java migrations have their SQL extracted from the
+// source. It returns findings and non-fatal problems.
 func analyze(path, text string, opts rules.Options, engine string) ([]rules.Finding, []string, error) {
+	if strings.EqualFold(filepath.Ext(path), ".java") {
+		return analyzeJava(text, opts, engine)
+	}
 	if !liquibase.IsStructured(path) {
 		if liquibase.Sniff(path, []byte(head(text))) {
 			opts.Tool = "liquibase"
@@ -122,6 +127,12 @@ func collect(paths []string) ([]string, error) {
 			switch {
 			case flyway.IsMigration(d.Name()):
 				out = append(out, path)
+			case strings.EqualFold(filepath.Ext(path), ".java"):
+				// Java migrations: by Flyway's file name, or by content (extends BaseJavaMigration, ...),
+				// so an ordinary Java class in the same folder is not mistaken for one.
+				if flyway.IsJavaMigration(d.Name()) || javamig.Sniff(readHead(path)) {
+					out = append(out, path)
+				}
 			case path == p && !liquibase.IsStructured(path):
 				out = append(out, path) // an explicit SQL file is always checked
 			case liquibase.IsStructured(path) || strings.EqualFold(filepath.Ext(path), ".sql"):

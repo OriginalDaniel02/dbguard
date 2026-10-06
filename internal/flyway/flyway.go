@@ -14,6 +14,12 @@ var name = regexp.MustCompile(`^(V[0-9][0-9._]*|R)__.+\.sql$`)
 // IsMigration reports whether a file name follows Flyway's SQL naming convention.
 func IsMigration(base string) bool { return name.MatchString(base) }
 
+var javaName = regexp.MustCompile(`^(V[0-9][0-9._]*|R)__.+\.java$`)
+
+// IsJavaMigration reports whether a file name follows Flyway's naming convention for
+// Java migrations (V2__Add_index.java: the class name is the file name).
+func IsJavaMigration(base string) bool { return javaName.MatchString(base) }
+
 // Collect expands paths into migration files. Explicit files are taken as-is
 // (so CI can pass exactly the files a PR changed); directories are walked for
 // Flyway-named files.

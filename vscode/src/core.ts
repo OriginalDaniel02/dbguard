@@ -55,7 +55,7 @@ export function parseReport(stdout: string): FileReport[] {
 	try {
 		data = JSON.parse(stdout);
 	} catch {
-		throw new ReportError('dbguard did not print JSON. Is it version 0.3.0 or newer?');
+		throw new ReportError('dbguard did not print JSON. Is it version 0.4.0 or newer?');
 	}
 	if (!Array.isArray(data)) {
 		throw new ReportError('unexpected dbguard output: expected a JSON array');
@@ -164,12 +164,12 @@ export function buildArgs(s: Settings, file: string): string[] {
 	return args;
 }
 
-/** True for Flyway-named SQL files (V1__x.sql, V2.1__x.sql, R__x.sql). */
+/** True for Flyway-named migrations: SQL (V1__x.sql, V2.1__x.sql, R__x.sql) and Java (V2__Add_index.java). */
 export function isFlywayName(basename: string): boolean {
-	return /^(V[0-9][0-9._]*|R)__.+\.sql$/.test(basename);
+	return /^(V[0-9][0-9._]*|R)__.+\.(sql|java)$/.test(basename);
 }
 
-export type CommentStyle = 'sql' | 'xml' | 'yaml';
+export type CommentStyle = 'sql' | 'xml' | 'yaml' | 'java';
 
 /** The comment syntax for acknowledging a risk in a file, or undefined (JSON has no comments). */
 export function commentStyleFor(fileName: string): CommentStyle | undefined {
@@ -182,6 +182,8 @@ export function commentStyleFor(fileName: string): CommentStyle | undefined {
 		case 'yaml':
 		case 'yml':
 			return 'yaml';
+		case 'java':
+			return 'java';
 		default:
 			return undefined;
 	}
@@ -203,6 +205,8 @@ export function ignoreComment(style: CommentStyle, rule: string, reason: string)
 			return `<!-- dbguard:ignore ${rule} reason: ${clean.replace(/-{2,}/g, '-')} -->`;
 		case 'yaml':
 			return `# dbguard:ignore ${rule} reason: ${clean}`;
+		case 'java':
+			return `// dbguard:ignore ${rule} reason: ${clean}`;
 	}
 }
 
@@ -212,7 +216,8 @@ export function parseVersion(output: string): [number, number, number] | undefin
 	return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
 }
 
-export const MIN_VERSION: [number, number, number] = [0, 3, 0];
+// 0.4.0 added Java migrations: an older dbguard would fail on a .java file instead of analyzing it.
+export const MIN_VERSION: [number, number, number] = [0, 4, 0];
 
 /** True if the binary is new enough (a dev build is accepted). */
 export function versionOk(output: string): boolean {

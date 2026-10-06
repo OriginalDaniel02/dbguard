@@ -4,7 +4,7 @@
 
 **Catch migrations that will lock production — before they merge.**
 
-Two tools in one binary. A **pre-flight checker** reads your Flyway or Liquibase migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead. A **schema drift detector** catches when staging and production have quietly diverged from what your migrations say.
+Two tools in one binary. A **pre-flight checker** reads your Flyway (SQL or Java) or Liquibase migration, looks at how big the target tables really are, and tells you which statements will block writes, for roughly how long, and what to do instead. A **schema drift detector** catches when staging and production have quietly diverged from what your migrations say.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![CI](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml/badge.svg)](https://github.com/OriginalDaniel02/dbguard/actions/workflows/ci.yml)
@@ -163,7 +163,7 @@ the editor and the pipeline always agree.
 Install the `.vsix` from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases) (the extension needs `dbguard` 0.3.0 or newer on your `PATH`):
 
 ```bash
-code --install-extension dbguard-0.3.0.vsix
+code --install-extension dbguard-0.4.0.vsix
 ```
 
 It checks Flyway-named files and the usual migration folders, for PostgreSQL and MySQL, Flyway and Liquibase. Settings, commands
@@ -230,6 +230,13 @@ dbguard check --rows transactions=14000000 --rows audit.events=900000000 V5__x.s
 dbguard check --placeholder schema=app --rows app.orders=5000000 V6__x.sql
 ```
 
+## Flyway Java migrations
+
+Migrations written as Java classes (`V2__Add_index.java`) are checked too. DB Guard reads the source, never runs it: it finds the SQL
+in plain strings, text blocks, concatenations and `String.format` templates, analyzes it with the same rules, and reports each finding
+on the Java line of the statement. SQL it cannot see (read from a file, assembled by a helper) is reported as not analyzed, never as
+clean. Overrides are `// dbguard:ignore <rule> reason: ...` comments. Details and limits: [docs/java.md](docs/java.md).
+
 ## Liquibase
 
 DB Guard checks Liquibase changelogs in **XML, YAML, JSON and formatted SQL** with the same risk rules, so no second tool or config is needed:
@@ -285,9 +292,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: OriginalDaniel02/dbguard/action@v0.3.0
+      - uses: OriginalDaniel02/dbguard/action@v0.4.0
         with:
-          version: v0.3.0
+          version: v0.4.0
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
           migrations-path: db/migration
 ```
@@ -310,7 +317,7 @@ The same check runs on GitLab merge requests. Include the template in your `.git
 
 ```yaml
 include:
-  - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.3.0/gitlab/dbguard.gitlab-ci.yml
+  - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.4.0/gitlab/dbguard.gitlab-ci.yml
 ```
 
 Then add these CI/CD variables (Settings > CI/CD > Variables, masked):
@@ -362,7 +369,7 @@ Please report vulnerabilities privately through GitHub's *Security → Report a 
 DB Guard is at **v0.3**. Being clear about what it does not do yet:
 
 - **PostgreSQL and MySQL** (8.0/8.4; 5.7 approximated). MariaDB is detected and warned about: its online DDL differs. The schema drift detector covers both engines.
-- **Flyway SQL and Liquibase changelogs only.** Java-based Flyway migrations and Liquibase custom change classes are not read. Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
+- **Flyway SQL, Flyway Java and Liquibase changelogs.** Liquibase custom change classes and Kotlin/Scala migrations are not read; for Java migrations only SQL that is visible in the source is analyzed (see [docs/java.md](docs/java.md)). Liquibase `include`/`includeAll` are not followed; changed files are checked individually, which is what CI passes.
 - **Flyway placeholders** (`${name}`) are understood: supply values with `--placeholder name=value`, otherwise they are treated as opaque names (so a table behind an unset `${schema}` has unknown size and is assumed large). A placeholder in a *value* position (e.g. `DEFAULT ${x}`) is treated conservatively.
 - **Rule coverage.** The risk rules are the tables in this README (PostgreSQL) and in [docs/mysql.md](docs/mysql.md). Other statements are ignored, not validated; a statement the parser cannot read is reported as "not analyzed", never skipped silently.
 - **Estimates are heuristics.** See [Duration estimates](#duration-estimates-are-ranges-not-promises).
@@ -387,7 +394,7 @@ Schema drift detection answers a different question — *has someone changed pro
 
 - Other engines (SQL Server, Oracle) and MariaDB's own online-DDL rules.
 - Drift for functions, procedures, custom types, extensions and permissions.
-- Java-based Flyway migrations and Liquibase custom change classes.
+- Liquibase custom change classes, and Kotlin or Scala Flyway migrations.
 - Publishing the VS Code extension to the Marketplace (for now it is a `.vsix` attached to each release).
 
 ## Development
@@ -411,6 +418,7 @@ DBGUARD_TEST_DSN='postgres://postgres:secret@localhost:55432/postgres?sslmode=di
 cmd/dbguard        CLI entry point (check, snapshot, drift, changelog, gitlab-comment, version)
 internal/flyway    Flyway migration discovery
 internal/liquibase Liquibase changelog parsing and translation
+internal/javamig   Flyway Java migrations: extracts the SQL from Java source
 internal/rules     Risk rules engine (parses SQL, produces findings)
 internal/estimate  Lock-duration range estimates
 internal/pg        Read-only PostgreSQL statistics and schema snapshots

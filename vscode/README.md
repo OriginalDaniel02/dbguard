@@ -20,7 +20,7 @@ configure it) is read-only.
 
 ## Requirements
 
-The `dbguard` binary, **version 0.3.0 or newer**, on your `PATH` (or set `dbguard.path`). Download it from the
+The `dbguard` binary, **version 0.4.0 or newer**, on your `PATH` (or set `dbguard.path`). Download it from the
 [releases page](https://github.com/OriginalDaniel02/dbguard/releases), then check:
 
 ```bash
@@ -35,9 +35,9 @@ dbguard version
 - **Real sizes and lock-time estimates** when a read-only connection string is available (`dbguard.dsnEnv`), or sizes you
   list in `dbguard.tableRows`. Without either, tables are assumed large.
 - **Quick fix: acknowledge a risk.** The lightbulb inserts an auditable `dbguard:ignore <rule> reason: ...` comment above
-  the statement (SQL `--`, Liquibase XML `<!-- -->`, YAML `#`). The reason is required and stays in the file, in git
+  the statement (SQL `--`, Java `//`, Liquibase XML `<!-- -->`, YAML `#`). The reason is required and stays in the file, in git
   history and in the PR comment. JSON changelogs have no comments: use the changeSet's `comment` field.
-- **PostgreSQL and MySQL**, Flyway SQL and Liquibase (XML, YAML, JSON, formatted SQL).
+- **PostgreSQL and MySQL**; Flyway SQL, **Flyway Java migrations** and Liquibase (XML, YAML, JSON, formatted SQL).
 - **Schema changelog**: *DB Guard: Show schema changelog for a table* answers "when did this column's type change?" from the
   snapshots your drift job saves.
 - Statements DB Guard could not analyze are shown as information, so a skipped statement is never silent.
@@ -75,7 +75,7 @@ any other file on demand.
 ## Troubleshooting
 
 - *"could not run dbguard"*: install the binary or set `dbguard.path`.
-- *"needs dbguard 0.3.0 or newer"*: the extension reads dbguard's JSON output, which became a stable contract in 0.3.0.
+- *"needs dbguard 0.4.0 or newer"*: the extension reads dbguard's JSON output (a stable contract since 0.3.0) and needs 0.4.0 for Java migrations.
 - *Nothing is flagged*: the table may be small (see `dbguard.largeRows`), the statement may be safe, or the file may not
   match `dbguard.include`. Run **Check this migration** and look at **Show output**.
 - *Sizes are always "unknown"*: VS Code does not see your connection string. Start VS Code from a shell where the variable is

@@ -235,6 +235,8 @@ func (e *engine) index(c stmtCtx, s *pg_query.IndexStmt) {
 	alt := "CREATE INDEX CONCURRENTLY (must run outside a transaction; in Flyway set executeInTransaction=false)"
 	if e.opts.Tool == "liquibase" {
 		alt = `CREATE INDEX CONCURRENTLY in a <sql> change with runInTransaction="false" (the createIndex change type cannot do this)`
+	} else if e.opts.Tool == "flyway-java" {
+		alt = "CREATE INDEX CONCURRENTLY (it cannot run inside a transaction: override canExecuteInTransaction() to return false in this migration)"
 	}
 	e.add(c, s.Relation, CreateIndex, High, estimate.IndexBuild,
 		"SHARE lock: blocks writes to the table for the whole index build", alt)

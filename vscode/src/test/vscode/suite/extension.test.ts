@@ -167,6 +167,27 @@ suite('DB Guard extension in a real VS Code', () => {
 		});
 	});
 
+	test('Flyway Java migration: flagged on the Java line, acknowledged with a // comment', async () => {
+		const a = await api();
+		const doc = await open('db', 'migration', 'V5__JavaIndex.java');
+		assert.strictEqual(doc.languageId, 'java');
+		await a.check(doc);
+		const d = mine(doc.uri).find((x) => codeOf(x) === 'create-index')!;
+		assert.ok(d, `create-index found in ${doc.fileName}`);
+		assert.strictEqual(d.severity, vscode.DiagnosticSeverity.Error);
+		assert.strictEqual(d.range.start.line, 10, 'the st.execute(...) line');
+		assert.match(doc.lineAt(d.range.start.line).text, /CREATE INDEX idx_transactions_ref/);
+
+		const actions = (await vscode.commands.executeCommand<vscode.CodeAction[]>('vscode.executeCodeActionProvider', doc.uri, d.range)) ?? [];
+		assert.ok(actions.some((x) => /acknowledge "create-index"/.test(x.title)), 'the quick fix is offered for Java');
+
+		await vscode.commands.executeCommand('dbguard.acknowledge', doc.uri, d.range.start.line, 'create-index', 'maintenance window');
+		assert.strictEqual(doc.lineAt(10).text, '            // dbguard:ignore create-index reason: maintenance window');
+		assert.strictEqual(doc.lineAt(10).text.indexOf('//'), 12, 'indented like the statement below it');
+		await waitFor('acknowledged', () => mine(doc.uri).some((x) => x.severity === vscode.DiagnosticSeverity.Hint));
+		await revert();
+	});
+
 	test('Liquibase XML: flagged on the changeSet line, acknowledged with an XML comment', async () => {
 		const a = await api();
 		const doc = await open('db', 'changelog', 'changelog.xml');

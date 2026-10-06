@@ -90,6 +90,11 @@ for (const [name, content, line] of [
 		1,
 	],
 	[
+		'V11__AckJava.java',
+		'import org.flywaydb.core.api.migration.BaseJavaMigration;\nclass V11__AckJava extends BaseJavaMigration {\n  void migrate() throws Exception {\n    st.execute("CREATE INDEX idx_amount ON transactions (amount)");\n  }\n}\n',
+		3,
+	],
+	[
 		'ack-changelog.yaml',
 		'databaseChangeLog:\n  - changeSet:\n      id: "1"\n      author: a\n      changes:\n        - createIndex:\n            tableName: transactions\n            indexName: i\n            columns:\n              - column:\n                  name: amount\n',
 		1,

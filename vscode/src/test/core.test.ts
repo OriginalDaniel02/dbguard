@@ -50,7 +50,7 @@ test('parseReport reads the documented JSON and defaults missing lists', () => {
 });
 
 test('parseReport rejects output that is not the JSON contract, with a helpful message', () => {
-	assert.throws(() => parseReport('usage: dbguard <command>'), /version 0\.3\.0/);
+	assert.throws(() => parseReport('usage: dbguard <command>'), /version 0\.4\.0/);
 	assert.throws(() => parseReport('{"a":1}'), /JSON array/);
 });
 
@@ -116,10 +116,10 @@ test('buildArgs: defaults are minimal, every setting maps to its flag', () => {
 });
 
 test('Flyway file names', () => {
-	for (const n of ['V1__init.sql', 'V2.1__add_col.sql', 'V10_3__x.sql', 'R__views.sql']) {
+	for (const n of ['V1__init.sql', 'V2.1__add_col.sql', 'V10_3__x.sql', 'R__views.sql', 'V2__AddIndex.java', 'R__Refresh.java']) {
 		assert.ok(isFlywayName(n), n);
 	}
-	for (const n of ['init.sql', 'V1_init.sql', 'V__x.sql', 'V1__x.txt', 'v1__x.sql']) {
+	for (const n of ['init.sql', 'V1_init.sql', 'V__x.sql', 'V1__x.txt', 'v1__x.sql', 'Helper.java', 'V1_Add.java']) {
 		assert.ok(!isFlywayName(n), n);
 	}
 });
@@ -129,10 +129,12 @@ test('ignore comments use the right syntax per file type and carry the reason', 
 	assert.equal(commentStyleFor('c.XML'), 'xml');
 	assert.equal(commentStyleFor('c.yml'), 'yaml');
 	assert.equal(commentStyleFor('c.yaml'), 'yaml');
+	assert.equal(commentStyleFor('V2__Add.java'), 'java');
 	assert.equal(commentStyleFor('c.json'), undefined, 'JSON has no comments');
 	assert.equal(ignoreComment('sql', 'create-index', 'quiet window'), '-- dbguard:ignore create-index reason: quiet window');
 	assert.equal(ignoreComment('xml', 'create-index', 'quiet window'), '<!-- dbguard:ignore create-index reason: quiet window -->');
 	assert.equal(ignoreComment('yaml', 'create-index', 'quiet window'), '# dbguard:ignore create-index reason: quiet window');
+	assert.equal(ignoreComment('java', 'create-index', 'quiet window'), '// dbguard:ignore create-index reason: quiet window');
 });
 
 test('ignore comments: a reason is mandatory, whitespace is collapsed, and XML stays well-formed', () => {
@@ -142,13 +144,14 @@ test('ignore comments: a reason is mandatory, whitespace is collapsed, and XML s
 	assert.ok(!ignoreComment('xml', 'r', 'see -- ticket --- 42').slice(4, -3).includes('--'));
 });
 
-test('versionOk: 0.3.0 and newer pass, older and unknown outputs fail, dev builds pass', () => {
-	assert.ok(versionOk('dbguard v0.3.0'));
-	assert.ok(versionOk('dbguard v0.3.1'));
+test('versionOk: 0.4.0 and newer pass, older and unknown outputs fail, dev builds pass', () => {
+	assert.ok(versionOk('dbguard v0.4.0'));
+	assert.ok(versionOk('dbguard v0.4.1'));
 	assert.ok(versionOk('dbguard v1.0.0'));
 	assert.ok(versionOk('dbguard dev'));
+	assert.ok(!versionOk('dbguard v0.3.0'), '0.3.x cannot read Java migrations');
+	assert.ok(!versionOk('dbguard v0.3.9'));
 	assert.ok(!versionOk('dbguard v0.2.0'));
-	assert.ok(!versionOk('dbguard v0.2.9'));
 	assert.ok(!versionOk('usage: dbguard <command>'));
 });
 

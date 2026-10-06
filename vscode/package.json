@@ -2,7 +2,7 @@
   "name": "dbguard",
   "displayName": "DB Guard",
   "description": "Warns inline when a database migration will lock production: sizes, estimated lock time and the safer alternative, for Flyway and Liquibase on PostgreSQL and MySQL.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "OriginalDaniel02",
   "license": "Apache-2.0",
   "repository": {
@@ -30,7 +30,8 @@
     "onLanguage:sql",
     "onLanguage:xml",
     "onLanguage:yaml",
-    "onLanguage:json"
+    "onLanguage:json",
+    "onLanguage:java"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -58,7 +59,7 @@
         "dbguard.path": {
           "type": "string",
           "default": "dbguard",
-          "markdownDescription": "Path to the `dbguard` binary (version 0.3.0 or newer). Download it from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases)."
+          "markdownDescription": "Path to the `dbguard` binary (version 0.4.0 or newer). Download it from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases)."
         },
         "dbguard.engine": {
           "type": "string",

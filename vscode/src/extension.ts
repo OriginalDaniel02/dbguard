@@ -17,7 +17,7 @@ import {
 import { BinaryNotFound, Handle, checkVersion, runChangelog, runCheck } from './runner';
 
 const SOURCE = 'DB Guard';
-const LANGUAGES = ['sql', 'xml', 'yaml', 'json'];
+const LANGUAGES = ['sql', 'xml', 'yaml', 'json', 'java'];
 const DOCS = vscode.Uri.parse('https://github.com/OriginalDaniel02/dbguard#risk-rules');
 const RELEASES = vscode.Uri.parse('https://github.com/OriginalDaniel02/dbguard/releases');
 

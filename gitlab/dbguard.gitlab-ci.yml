@@ -4,7 +4,7 @@
 # Usage, in your .gitlab-ci.yml:
 #
 #   include:
-#     - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.3.0/gitlab/dbguard.gitlab-ci.yml
+#     - remote: https://raw.githubusercontent.com/OriginalDaniel02/dbguard/v0.4.0/gitlab/dbguard.gitlab-ci.yml
 #
 # Required CI/CD variables (Settings > CI/CD > Variables, masked):
 #   DBGUARD_GITLAB_TOKEN  project/group access token (or PAT) with the "api" scope and the Developer
@@ -19,7 +19,7 @@ dbguard:check:
   image: alpine:3.20
   variables:
     GIT_DEPTH: "0" # the merge base must be available to diff against
-    DBGUARD_VERSION: "v0.3.0"
+    DBGUARD_VERSION: "v0.4.0"
     DBGUARD_REPO: "OriginalDaniel02/dbguard"
     DBGUARD_MIGRATIONS_PATH: "db/migration"
     DBGUARD_FAIL_ON: "medium-high"
@@ -43,7 +43,7 @@ dbguard:check:
 
       # Migration files changed by this merge request (deleted files excluded).
       changed=$(git diff --name-only --diff-filter=d "$CI_MERGE_REQUEST_DIFF_BASE_SHA" HEAD -- "$DBGUARD_MIGRATIONS_PATH" \
-        | grep -E '\.(sql|xml|ya?ml|json)$' || true)
+        | grep -E '\.(sql|xml|ya?ml|json|java)$' || true)
 
       if [ -z "$changed" ]; then
         # Nothing to check. Resolve a stale warning from an earlier push, never create a comment.

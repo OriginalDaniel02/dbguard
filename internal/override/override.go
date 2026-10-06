@@ -5,6 +5,7 @@
 //	-- dbguard:ignore <rule-id> reason: <why this is acceptable>      (SQL)
 //	<!-- dbguard:ignore <rule-id> reason: <why> -->                   (Liquibase XML)
 //	# dbguard:ignore <rule-id> reason: <why>                          (Liquibase YAML)
+//	// dbguard:ignore <rule-id> reason: <why>                         (Flyway Java migrations)
 //
 // The comment must sit on the line(s) directly above the statement (or changeSet),
 // or inside it. A reason is mandatory; an ignore without one is itself reported.
@@ -20,7 +21,7 @@ import (
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
 )
 
-var re = regexp.MustCompile(`^\s*(?:--|#|<!--)\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*?))?\s*(?:-->)?\s*$`)
+var re = regexp.MustCompile(`^\s*(?:--|#|//|<!--)\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*?))?\s*(?:-->)?\s*$`)
 
 var commentRe = regexp.MustCompile(`(?s)^\s*dbguard:ignore\s+([a-z0-9-]+)(?:\s+reason:\s*(.*?))?\s*$`)
 
@@ -86,6 +87,17 @@ func Apply(sql string, fs []rules.Finding) (problems []string) {
 	return problems
 }
 
+// isCommentLine reports whether a trimmed line is a comment in any supported syntax
+// (SQL --, YAML #, Java //, /* ... */ and * continuation lines, XML <!-- -->).
+func isCommentLine(t string) bool {
+	for _, p := range []string{"--", "#", "//", "/*", "*", "<!--"} {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // directlyAbove: every line from the directive up to the statement is a comment or blank.
 func directlyAbove(lines []string, dline, stmtLine int) bool {
 	if dline >= stmtLine {
@@ -93,7 +105,7 @@ func directlyAbove(lines []string, dline, stmtLine int) bool {
 	}
 	for l := dline + 1; l < stmtLine; l++ {
 		t := strings.TrimSpace(lines[l-1])
-		if t != "" && !strings.HasPrefix(t, "--") {
+		if t != "" && !isCommentLine(t) {
 			return false
 		}
 	}

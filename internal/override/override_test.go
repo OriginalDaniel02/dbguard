@@ -1,6 +1,7 @@
 package override
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/OriginalDaniel02/dbguard/internal/rules"
@@ -75,5 +76,32 @@ func TestXMLOverrideAboveChangeSet(t *testing.T) {
 	fs := []rules.Finding{{Rule: rules.CreateIndex, Line: 3, Statement: "CREATE INDEX i ON t (a)"}}
 	if probs := Apply(sql, fs); len(probs) != 0 || fs[0].Override != "quiet window" {
 		t.Fatalf("%+v %v", fs, probs)
+	}
+}
+
+func TestDirectiveAboveOtherCommentLines(t *testing.T) {
+	// The ignore may be followed by more comment lines (any syntax) before the statement.
+	cases := map[string]string{
+		"sql":  "-- dbguard:ignore create-index reason: quiet window\n-- see ticket 42\n\nCREATE INDEX i ON t (a);\n",
+		"yaml": "# dbguard:ignore create-index reason: quiet window\n# see ticket 42\nCREATE INDEX i ON t (a);\n",
+		"java": "// dbguard:ignore create-index reason: quiet window\n// see ticket 42\n/* more */\nCREATE INDEX i ON t (a);\n",
+		"xml":  "<!-- dbguard:ignore create-index reason: quiet window -->\n<!-- see ticket 42 -->\nCREATE INDEX i ON t (a);\n",
+	}
+	for name, sql := range cases {
+		fs, err := rules.Check("CREATE INDEX i ON t (a);", rules.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs[0].Line = strings.Count(strings.TrimRight(sql, "\n"), "\n") + 1 // the statement is the last line
+		if probs := Apply(sql, fs); len(probs) != 0 || fs[0].Override != "quiet window" {
+			t.Errorf("%s: override not applied: %+v %v", name, fs[0], probs)
+		}
+	}
+	// A real statement between the directive and the finding breaks the link.
+	sql := "// dbguard:ignore create-index reason: x\nint a = 1;\nCREATE INDEX i ON t (a);\n"
+	fs, _ := rules.Check("CREATE INDEX i ON t (a);", rules.Options{})
+	fs[0].Line = 3
+	if Apply(sql, fs); fs[0].Override != "" {
+		t.Error("an ignore separated from the statement by code must not apply")
 	}
 }
