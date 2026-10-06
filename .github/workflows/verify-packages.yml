@@ -1,0 +1,85 @@
+name: Verify packages
+# Installs dbguard the way users will, from each distribution channel, and checks it runs and reports
+# the right version. Runs after every release, and on demand for any tag.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.5.0
+        required: true
+        type: string
+      taps:
+        description: Also test the Homebrew tap and Scoop bucket (they must already be at this tag)
+        required: false
+        type: boolean
+        default: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.4.0
+        required: true
+        type: string
+      taps:
+        description: Also test the Homebrew tap and Scoop bucket
+        required: false
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  homebrew:
+    if: ${{ inputs.taps }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install from the Homebrew tap
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          brew tap OriginalDaniel02/tap
+          brew install OriginalDaniel02/tap/dbguard
+          out=$(dbguard version)
+          echo "$out"
+          [ "$out" = "dbguard ${TAG}" ]
+          brew test OriginalDaniel02/tap/dbguard
+      - name: A real check
+        run: dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql | grep -q create-index
+
+  scoop:
+    if: ${{ inputs.taps }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Scoop
+        shell: pwsh
+        run: |
+          Invoke-RestMethod -Uri https://get.scoop.sh -OutFile install.ps1
+          ./install.ps1 -RunAsAdmin
+          Add-Content $env:GITHUB_PATH "$HOME\scoop\shims"
+      - name: Install from the Scoop bucket
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          scoop bucket add dbguard https://github.com/OriginalDaniel02/scoop-bucket
+          scoop install dbguard
+          $out = (dbguard version)
+          Write-Host $out
+          if ($out -ne "dbguard $env:TAG") { throw "unexpected version: $out" }
+      - name: A real check
+        shell: bash
+        run: dbguard check --rows transactions=14000000 testdata/migrations/V2__risky.sql | grep -q create-index
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pull the image anonymously (this also proves the package is public)
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          out=$(docker run --rm "ghcr.io/originaldaniel02/dbguard:${TAG}" version)
+          echo "$out"
+          [ "$out" = "dbguard ${TAG}" ]
+      - name: A real check, from the image
+        run: docker run --rm -v "$PWD/testdata:/t:ro" ghcr.io/originaldaniel02/dbguard:latest check --rows transactions=14000000 /t/migrations/V2__risky.sql | grep -q create-index

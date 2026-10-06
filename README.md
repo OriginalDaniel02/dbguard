@@ -292,20 +292,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: OriginalDaniel02/dbguard/action@v0.4.0
+      - uses: OriginalDaniel02/dbguard@v0.5.0
         with:
-          version: v0.4.0
-          dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
+          dsn: ${{ secrets.DBGUARD_READONLY_DSN }}   # optional: real table sizes
           migrations-path: db/migration
 ```
 
+Pinning `@v0.5.0` installs exactly that release (checksum-verified), so there is nothing else to configure. For supply-chain safety
+you can pin a commit SHA instead; `@v0` follows the latest 0.x release. *(Before v0.5.0 the Action lived at
+`OriginalDaniel02/dbguard/action@v0.4.0`; those older tags keep working.)*
+
 | Input | Default | Description |
 |---|---|---|
-| `dsn` | — | Read-only PostgreSQL connection string. Pass it from a secret. |
-| `migrations-path` | `db/migration` | Only changed `.sql` files under this path are checked |
+| `dsn` | none | Read-only PostgreSQL or MySQL connection string. Pass it from a secret |
+| `migrations-path` | `db/migration` | Only changed migration files under this path are checked (`.sql`, `.java`, `.xml`, `.yaml`, `.json`) |
 | `fail-on` | `medium-high` | Lowest risk that fails the check |
 | `engine` | *(detected)* | `postgres` or `mysql`. Empty: from the connection string, else `postgres` |
-| `version` | *(empty)* | Release to install (checksum-verified). Empty builds from the action's checkout |
+| `version` | *(the pinned tag)* | Release to install. Empty: the release matching the tag you pinned, or the latest if you pinned a branch, SHA or `v0`. `source` builds from the checkout |
+
+The Action runs on Linux runners.
 
 Do not add a `paths:` filter to this workflow. The action only looks at changed migration files and does nothing otherwise, whereas a path filter skips the run entirely: a stale warning stays on the PR after the risky migration is removed, and if you mark the check as *required*, PRs that don't touch migrations would wait forever for a check that never starts.
 

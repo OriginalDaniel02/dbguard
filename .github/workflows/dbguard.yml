@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./action
+      - uses: ./
         with:
-          version: v0.4.0
+          version: source # dogfood: build the action's own checkout
           dsn: ${{ secrets.DBGUARD_READONLY_DSN }}
           migrations-path: db/migration

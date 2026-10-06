@@ -1,24 +1,30 @@
-name: DB Guard
-description: Pre-flight check for risky PostgreSQL (Flyway) migrations. Posts a PR comment and fails the check on risky changes.
+name: "DB Guard: database migration safety check"
+description: "Warns on PRs when a PostgreSQL or MySQL migration (Flyway, Liquibase) will lock production. One PR comment, fails on risk."
+author: OriginalDaniel02
+branding:
+  icon: shield
+  color: blue
 inputs:
   dsn:
-    description: Read-only PostgreSQL connection string (pass from a secret; never printed).
+    description: Read-only PostgreSQL or MySQL connection string, from a secret. Used for real table sizes; never printed.
     required: false
   migrations-path:
-    description: Directory containing Flyway migrations (only changed files under it are checked).
+    description: Directory containing your migrations (only changed files under it are checked). For Java migrations use e.g. src/main/java/db/migration.
     default: db/migration
   fail-on:
     description: Lowest risk that fails the check (low | medium | medium-high | high).
     default: medium-high
-  github-token:
-    description: Token used to read PR files and post the comment.
-    default: ${{ github.token }}
   engine:
     description: Database engine (postgres | mysql). Empty = detect from the connection string, else postgres.
     default: ""
   version:
-    description: dbguard release to install (e.g. v1.0.0). Empty = build from this checkout.
+    description: >-
+      dbguard release to install. Empty = the release matching the tag you pinned (uses: ...@v0.5.0 installs v0.5.0),
+      or the latest release if you pinned a branch, SHA or moving tag such as v0. "source" builds from this checkout (needs Go).
     default: ""
+  github-token:
+    description: Token used to read PR files and post the comment.
+    default: ${{ github.token }}
   repository:
     description: GitHub repository that publishes dbguard releases.
     default: ${{ github.action_repository || github.repository }}
@@ -30,17 +36,25 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
         REPO: ${{ inputs.repository }}
       run: |
-        if [ -n "$VERSION" ]; then
+        v="$VERSION"
+        if [ -z "$v" ]; then
+          # Pinned to an exact release tag: install exactly that release. Otherwise the latest.
+          if [[ "$ACTION_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then v="$ACTION_REF"; else v="latest"; fi
+        fi
+        if [ "$v" = "source" ]; then
+          cd "${{ github.action_path }}" && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/dbguard" ./cmd/dbguard
+        else
           # Prebuilt, checksum-verified binary: no Go toolchain needed on the runner.
           arch=$([ "$(uname -m)" = "aarch64" ] && echo arm64 || echo amd64)
-          gh release download "$VERSION" -R "$REPO" -p "dbguard_linux_${arch}" -p checksums.txt -D "$RUNNER_TEMP/dl"
+          tag_arg=(); [ "$v" != "latest" ] && tag_arg=("$v")
+          gh release download "${tag_arg[@]}" -R "$REPO" -p "dbguard_linux_${arch}" -p checksums.txt -D "$RUNNER_TEMP/dl"
           (cd "$RUNNER_TEMP/dl" && grep " dbguard_linux_${arch}\$" checksums.txt | sha256sum -c -)
           install -m 0755 "$RUNNER_TEMP/dl/dbguard_linux_${arch}" "$RUNNER_TEMP/dbguard"
-        else
-          cd "${{ github.action_path }}/.." && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/dbguard" ./cmd/dbguard
         fi
+        "$RUNNER_TEMP/dbguard" version
     - name: Find changed migrations
       id: files
       shell: bash

@@ -90,7 +90,7 @@ Java migrations normally live under `src/main/java/db/migration`, not `db/migrat
 
 ```yaml
 # GitHub Action
-- uses: OriginalDaniel02/dbguard/action@v0.4.0
+- uses: OriginalDaniel02/dbguard@v0.5.0
   with:
     migrations-path: src/main/java/db/migration
 ```
