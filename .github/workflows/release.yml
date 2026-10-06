@@ -21,6 +21,13 @@ jobs:
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "dist/dbguard_${os}_${arch}${ext}" ./cmd/dbguard
           done
           (cd dist && sha256sum * > checksums.txt)
+      - name: Smoke test the release binary
+        run: |
+          out=$(./dist/dbguard_linux_amd64 version)
+          echo "$out"
+          [ "$out" = "dbguard ${GITHUB_REF_NAME}" ] || { echo "version stamp does not match the tag"; exit 1; }
+          ./dist/dbguard_linux_amd64 check --rows transactions=14000000 testdata/migrations/V2__risky.sql | tee /dev/stderr | grep -q "create-index"
+          ./dist/dbguard_linux_amd64 check --engine mysql --rows orders=14000000 testdata/liquibase/mysql-changelog.xml | grep -q "add-foreign-key"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
