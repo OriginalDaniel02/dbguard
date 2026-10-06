@@ -32,6 +32,8 @@ jobs:
           npm ci
           npm pkg set version="${GITHUB_REF_NAME#v}"
           npm run package
+          # the extension is covered by the same checksums.txt as the binaries
+          sha256sum *.vsix >> ../dist/checksums.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: |
