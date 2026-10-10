@@ -355,6 +355,19 @@ export function activate(context: vscode.ExtensionContext): Api {
 			}
 			const cwd = workspaceFolderFor(uri);
 			const dir = path.resolve(cwd ?? process.cwd(), dirOverride ?? cfg().get<string>('snapshotsDir', 'snapshots'));
+			if (!hasSnapshots(dir)) {
+				const choice = await vscode.window.showInformationMessage(
+					`DB Guard: no schema snapshots found in ${dir}. The changelog is built from snapshots saved by your drift job: run "dbguard drift --save-dir ${cfg().get<string>('snapshotsDir', 'snapshots')}" (or point the dbguard.snapshotsDir setting at the folder that has them).`,
+					'Open docs',
+					'Open setting',
+				);
+				if (choice === 'Open docs') {
+					void vscode.env.openExternal(vscode.Uri.parse('https://github.com/OriginalDaniel02/dbguard#schema-changelog-when-did-that-column-change'));
+				} else if (choice === 'Open setting') {
+					void vscode.commands.executeCommand('workbench.action.openSettings', 'dbguard.snapshotsDir');
+				}
+				return;
+			}
 			const args = ['--dir', dir, '--format', 'markdown'];
 			if (table.trim()) {
 				args.push('--table', table.trim());
@@ -382,6 +395,17 @@ export function activate(context: vscode.ExtensionContext): Api {
 	refreshStatus();
 
 	return { check };
+}
+
+/** True when dir holds at least one <env>/<timestamp>.json snapshot (the layout `drift --save-dir` writes). */
+function hasSnapshots(dir: string): boolean {
+	try {
+		return fs
+			.readdirSync(dir, { withFileTypes: true })
+			.some((e) => e.isDirectory() && fs.readdirSync(path.join(dir, e.name)).some((f) => f.endsWith('.json')));
+	} catch {
+		return false;
+	}
 }
 
 export function deactivate(): void {

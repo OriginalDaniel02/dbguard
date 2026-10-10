@@ -39,7 +39,8 @@ dbguard version
   history and in the PR comment. JSON changelogs have no comments: use the changeSet's `comment` field.
 - **PostgreSQL and MySQL**; Flyway SQL, **Flyway Java migrations** and Liquibase (XML, YAML, JSON, formatted SQL).
 - **Schema changelog**: *DB Guard: Show schema changelog for a table* answers "when did this column's type change?" from the
-  snapshots your drift job saves.
+  snapshots your drift job saves. It needs those snapshots to exist: run `dbguard drift --save-dir snapshots` (on a schedule,
+  in CI) and keep the folder in the workspace, or point `dbguard.snapshotsDir` at it. Without them the command explains this.
 - Statements DB Guard could not analyze are shown as information, so a skipped statement is never silent.
 
 ## Which files are checked

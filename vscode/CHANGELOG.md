@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- *Show schema changelog* now explains how to create snapshots (`dbguard drift --save-dir`) when the snapshots folder is missing or empty, instead of showing a raw CLI error.
+
 ## 0.4.0
 
 - Java-based Flyway migrations (`V2__Add_index.java`): the SQL in the source is analyzed, findings are shown on the Java line, and the quick fix inserts a `// dbguard:ignore` comment. Requires dbguard 0.4.0.
