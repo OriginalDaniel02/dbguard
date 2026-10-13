@@ -158,7 +158,7 @@ the editor and the pipeline always agree.
 Install the `.vsix` from the [releases page](https://github.com/OriginalDaniel02/dbguard/releases) (the extension needs `dbguard` 0.4.0 or newer on your `PATH`):
 
 ```bash
-code --install-extension dbguard-0.4.0.vsix
+code --install-extension dbguard-<version>.vsix
 ```
 
 It checks Flyway-named files and the usual migration folders, for PostgreSQL and MySQL, Flyway and Liquibase. Settings, commands
@@ -421,7 +421,6 @@ Schema drift detection answers a different question — *has someone changed pro
 - Other engines (SQL Server, Oracle) and MariaDB's own online-DDL rules.
 - Drift for functions, procedures, custom types, extensions and permissions.
 - Liquibase custom change classes, and Kotlin or Scala Flyway migrations.
-- Publishing the VS Code extension to the Marketplace (for now it is a `.vsix` attached to each release).
 
 ## Development
 

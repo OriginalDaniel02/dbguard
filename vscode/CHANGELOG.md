@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 - *Show schema changelog* now explains how to create snapshots (`dbguard drift --save-dir`) when the snapshots folder is missing or empty, instead of showing a raw CLI error.
 

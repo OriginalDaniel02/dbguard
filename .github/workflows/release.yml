@@ -77,6 +77,16 @@ jobs:
           git config user.email "github-actions@users.noreply.github.com"
           git tag -fa "$major" -m "Moves to $GITHUB_REF_NAME" "$GITHUB_SHA"
           git push -f origin "refs/tags/$major"
+      # Needs the repository secrets VSCE_PAT (VS Code Marketplace) and/or OVSX_PAT (Open VSX); a missing one is skipped.
+      - name: Publish the VS Code extension
+        working-directory: vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          vsix=$(ls *.vsix)
+          if [ -n "$VSCE_PAT" ]; then npx vsce publish --packagePath "$vsix"; else echo "VSCE_PAT is not set: skipping the VS Code Marketplace"; fi
+          if [ -n "$OVSX_PAT" ]; then npx ovsx publish "$vsix" -p "$OVSX_PAT"; else echo "OVSX_PAT is not set: skipping Open VSX"; fi
 
   publish-packages:
     needs: release
